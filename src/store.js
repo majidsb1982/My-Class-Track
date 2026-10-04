@@ -484,6 +484,96 @@ export function getUpcomingBirthdays(days = 7, from = new Date()) {
   return out.sort((a, b) => a.daysLeft - b.daysLeft);
 }
 
+/* ---------- Payments (per session) ---------- */
+
+/** Payment records for one session. */
+export function getPayments(sessionId) {
+  load();
+  return clone(data.payments.filter((p) => p.sessionId === sessionId));
+}
+
+/**
+ * Record (or clear) a member's payment for a session.
+ * @param {Object} input { sessionId, memberId, paid, dateJy, note }
+ */
+export function savePayment(input) {
+  load();
+  const errors = {};
+  if (!input.sessionId) errors.session = 'جلسه انتخاب نشده است.';
+  if (!input.memberId) errors.member = 'عضو انتخاب نشده است.';
+  if (Object.keys(errors).length) return { ok: false, errors };
+
+  const idx = data.payments.findIndex(
+    (p) => p.sessionId === input.sessionId && p.memberId === input.memberId,
+  );
+
+  if (!input.paid) {
+    // A cleared payment is removed so the row returns to "unpaid".
+    if (idx !== -1) {
+      data.payments.splice(idx, 1);
+      commit('payment:clear', { sessionId: input.sessionId, memberId: input.memberId });
+    }
+    return { ok: true };
+  }
+
+  const dateJy = input.dateJy && Number.isInteger(input.dateJy.jy)
+    ? { jy: input.dateJy.jy, jm: input.dateJy.jm, jd: input.dateJy.jd }
+    : null;
+  const record = {
+    sessionId: input.sessionId,
+    memberId: input.memberId,
+    paid: true,
+    dateJy,
+    note: String(input.note || '').trim(),
+  };
+
+  if (idx === -1) data.payments.push(record);
+  else data.payments[idx] = record;
+  commit('payment:save', { sessionId: record.sessionId, memberId: record.memberId });
+  return { ok: true };
+}
+
+/* ---------- Homeworks ---------- */
+
+export function getHomeworks() {
+  load();
+  return clone([...data.homeworks].sort(
+    (a, b) => (b.jy - a.jy) || (b.jm - a.jm) || (b.jd - a.jd),
+  ));
+}
+
+export function saveHomework(input) {
+  load();
+  const errors = {};
+  const text = String(input.text || '').trim();
+  if (!text) errors.text = 'متن تکلیف را وارد کنید.';
+  else if (text.length > 2000) errors.text = 'متن تکلیف بیش از حد طولانی است.';
+  if (!Number.isInteger(input.jy) || !Number.isInteger(input.jm) || !Number.isInteger(input.jd)) {
+    errors.date = 'تاریخ تکلیف معتبر نیست.';
+  }
+  if (Object.keys(errors).length) return { ok: false, errors };
+
+  const item = {
+    id: input.id || makeId('h'),
+    jy: input.jy, jm: input.jm, jd: input.jd,
+    text,
+  };
+  const idx = data.homeworks.findIndex((h) => h.id === item.id);
+  if (idx === -1) data.homeworks.push(item);
+  else data.homeworks[idx] = item;
+  commit('homework:save', { id: item.id });
+  return { ok: true, id: item.id };
+}
+
+export function deleteHomework(id) {
+  load();
+  const before = data.homeworks.length;
+  data.homeworks = data.homeworks.filter((h) => h.id !== id);
+  if (data.homeworks.length === before) return false;
+  commit('homework:delete', { id });
+  return true;
+}
+
 /** Clamp a birthday to a valid date (handles Feb 30 style edge cases). */
 function safeBirthday(jy, jm, jd) {
   try {
@@ -568,6 +658,11 @@ export default {
   saveScheduleEntry,
   deleteScheduleEntry,
   getPeriods,
+  getPayments,
+  savePayment,
+  getHomeworks,
+  saveHomework,
+  deleteHomework,
   getNextClass,
   getUpcomingBirthdays,
   exportData,
