@@ -231,6 +231,112 @@ export function deleteMember(id) {
   return true;
 }
 
+/* ---------- Sessions & attendance ---------- */
+
+/** Attendance statuses for a slot. */
+export const ATTENDANCE_STATUS = {
+  present: { label: 'حاضر', icon: '✅', tone: 'success' },
+  late: { label: 'تأخیر', icon: '⏰', tone: 'warning' },
+  absent: { label: 'غایب', icon: '❌', tone: 'danger' },
+  problem: { label: 'مشکل', icon: '⚠️', tone: 'problem' },
+};
+
+export const STATUS_KEYS = Object.keys(ATTENDANCE_STATUS);
+
+/** Find a session by its Jalali date, or null. */
+export function findSessionByDate(jy, jm, jd) {
+  load();
+  return data.sessions.find((s) => s.jy === jy && s.jm === jm && s.jd === jd) || null;
+}
+
+/**
+ * Get or create the session for a given Jalali date.
+ * @returns {{id:string, jy:number, jm:number, jd:number, slots:Object}}
+ */
+export function ensureSession(jy, jm, jd) {
+  load();
+  let session = data.sessions.find((s) => s.jy === jy && s.jm === jm && s.jd === jd);
+  if (!session) {
+    session = { id: makeId('s'), jy, jm, jd, slots: { 1: {}, 2: {} } };
+    data.sessions.push(session);
+    commit('session:create', { id: session.id });
+  }
+  // Defensive: older sessions may lack a slot map.
+  if (!session.slots) session.slots = { 1: {}, 2: {} };
+  if (!session.slots[1]) session.slots[1] = {};
+  if (!session.slots[2]) session.slots[2] = {};
+  return clone(session);
+}
+
+/** List sessions, newest first. */
+export function getSessions() {
+  load();
+  return clone([...data.sessions].sort((a, b) => (b.jy - a.jy) || (b.jm - a.jm) || (b.jd - a.jd)));
+}
+
+export function getSession(id) {
+  load();
+  const s = data.sessions.find((x) => x.id === id);
+  return s ? clone(s) : null;
+}
+
+/**
+ * Record a member's attendance for one slot of one session.
+ * @param {string} sessionId
+ * @param {1|2} slot
+ * @param {string} memberId
+ * @param {Object} entry { status, lateTime, note }
+ */
+export function setAttendance(sessionId, slot, memberId, entry) {
+  load();
+  const session = data.sessions.find((s) => s.id === sessionId);
+  if (!session) return { ok: false, errors: { session: 'جلسه پیدا نشد.' } };
+
+  const key = String(slot);
+  if (key !== '1' && key !== '2') return { ok: false, errors: { slot: 'نوبت نامعتبر است.' } };
+  if (!session.slots) session.slots = { 1: {}, 2: {} };
+  if (!session.slots[key]) session.slots[key] = {};
+
+  if (!entry || !entry.status) {
+    delete session.slots[key][memberId];
+  } else {
+    if (!STATUS_KEYS.includes(entry.status)) {
+      return { ok: false, errors: { status: 'وضعیت نامعتبر است.' } };
+    }
+    const rec = { status: entry.status, at: new Date().toISOString() };
+    const lateTime = String(entry.lateTime || '').trim();
+    if (entry.status === 'late' && lateTime) rec.lateTime = lateTime;
+    const note = String(entry.note || '').trim();
+    if (note) rec.note = note;
+    session.slots[key][memberId] = rec;
+  }
+  commit('attendance:set', { sessionId, slot: key, memberId });
+  return { ok: true };
+}
+
+/** How many members have a decision in the given slot. */
+export function attendanceProgress(session, slot) {
+  const map = session?.slots?.[String(slot)] || {};
+  return Object.keys(map).length;
+}
+
+/**
+ * Members who are still "unknown" for a slot — the ones to call at the door.
+ * A member is unknown when the previous slot has no decision, or was marked
+ * absent/problem (still worth a follow-up call).
+ */
+export function getPendingMembers(session, slot) {
+  load();
+  const members = data.members.filter((m) => m.active !== false);
+  const current = session?.slots?.[String(slot)] || {};
+  const previous = slot === 2 ? (session?.slots?.['1'] || {}) : {};
+
+  return clone(members.filter((m) => {
+    if (!current[m.id]) return true; // not yet recorded in this slot
+    return false;
+  }).map((m) => ({ ...m, previous: previous[m.id] || null })));
+}
+
 /** Validate member input. Returns an errors map (empty when valid). */
 export function validateMember(input) {
   const errors = {};
@@ -440,7 +546,16 @@ export function clearAll() {
 export default {
   ROLES,
   ROLE_KEYS,
+  ATTENDANCE_STATUS,
+  STATUS_KEYS,
   load,
+  findSessionByDate,
+  ensureSession,
+  getSessions,
+  getSession,
+  setAttendance,
+  attendanceProgress,
+  getPendingMembers,
   subscribe,
   getData,
   getMembers,
