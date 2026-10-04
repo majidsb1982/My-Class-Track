@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="description" content="My-Class-Track — دستیار پیگیری حضور، شهریه و تکالیف کلاس گروه‌درمانی هفتگی" />
+  <meta name="theme-color" content="#5b5bd6" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>My-Class-Track</title>
+
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icons/icon-192.svg" />
+
+  <link rel="stylesheet" href="src/styles.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main-content">رفتن به محتوای اصلی</a>
+
+  <div class="app-shell">
+    <header class="app-header" role="banner">
+      <button class="icon-btn" id="theme-toggle" type="button" aria-label="تغییر تم روشن و تیره" title="تغییر تم">
+        <span class="icon-slot" data-icon="theme" aria-hidden="true"></span>
+      </button>
+      <div class="app-title">
+        <span class="app-title__mark" aria-hidden="true">MCT</span>
+        <h1 class="app-title__text">My-Class-Track</h1>
+      </div>
+      <button class="icon-btn" id="quick-help" type="button" aria-label="راهنمای سریع" title="راهنما">
+        <span class="icon-slot" data-icon="help" aria-hidden="true"></span>
+      </button>
+    </header>
+
+    <main id="main-content" class="app-main" role="main" tabindex="-1" aria-live="polite"></main>
+
+    <nav class="bottom-nav" aria-label="ناوبری اصلی">
+      <ul class="bottom-nav__list" id="bottom-nav"></ul>
+    </nav>
+  </div>
+
+  <!-- Container for dialogs & toasts (built by ui.js) -->
+  <div id="overlay-root"></div>
+
+  <!-- Jalali calendar self-test result (phase 2), hidden unless debug enabled -->
+  <div id="selftest" hidden></div>
+
+  <noscript>
+    <p class="noscript-warning">برای استفاده از این برنامه، جاوااسکریپت مرورگر باید فعال باشد.</p>
+  </noscript>
+
+  <script type="module" src="src/app.js"></script>
+</body>
+</html>
