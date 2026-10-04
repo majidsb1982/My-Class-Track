@@ -10,6 +10,9 @@ import { load as loadStore, subscribe as subscribeStore } from './store.js';
 import { renderMembers } from './pages/members.js';
 import { renderSettings } from './pages/settings.js';
 import { renderAttendance } from './pages/attendance.js';
+import { renderPayment } from './pages/payment.js';
+import { renderHomework } from './pages/homework.js';
+import { renderHome } from './pages/home.js';
 
 /* ---------- Routes ---------- */
 
@@ -24,37 +27,18 @@ const ROUTES = [
 
 const DEFAULT_ROUTE = 'home';
 
-/* Per-route empty-state configuration (phase 1 placeholders). */
-const PLACEHOLDERS = {
-  home: {
-    icon: 'sparkles',
-    title: 'به My-Class-Track خوش آمدید',
-    text: 'اینجا خلاصه کلاس، کلاس بعدی، تولدهای نزدیک و میان‌برهای سریع نمایش داده می‌شود.',
-    actionLabel: 'شروع از اعضا',
-    actionRoute: 'members',
-  },
-  payment: {
-    icon: 'payment',
-    title: 'وضعیت شهریه‌ای ثبت نشده',
-    text: 'با ثبت اعضا و جلسات، وضعیت پرداخت شهریه هر جلسه اینجا نمایش داده می‌شود.',
-    actionLabel: 'افزودن اعضا',
-    actionRoute: 'members',
-  },
-  homework: {
-    icon: 'homework',
-    title: 'تکلیفی ثبت نشده است',
-    text: 'تکلیف هر هفته را ثبت کنید و متن آماده واتساپ بگیرید.',
-    actionLabel: 'تنظیمات کلاس',
-    actionRoute: 'settings',
-  },
-};
+/* Per-route empty-state fallback for any page without an implementation yet. */
+const PLACEHOLDERS = {};
 
 /* Routes that have a real implementation (phase 3+). Each page receives the
    container and a small context object (navigate + route options). */
 const PAGES = {
+  home: (container, ctx) => renderHome(container, ctx),
   members: (container) => renderMembers(container),
   settings: (container) => renderSettings(container),
   attendance: (container, ctx) => renderAttendance(container, ctx),
+  payment: (container, ctx) => renderPayment(container, ctx),
+  homework: (container, ctx) => renderHomework(container, ctx),
 };
 
 /* ---------- Theme & preferences ---------- */
@@ -166,7 +150,7 @@ function renderPlaceholder(main, route) {
   }));
 }
 
-function renderRoute(routeId) {
+function renderRoute(routeId, { keepOptions = false } = {}) {
   const main = document.getElementById('main-content');
   if (!main) return;
   const route = ROUTES.find((r) => r.id === routeId) || ROUTES[0];
@@ -178,6 +162,7 @@ function renderRoute(routeId) {
   const renderPage = PAGES[route.id];
   if (renderPage) {
     renderPage(page, { navigate, ...routeOptions });
+    if (!keepOptions) routeOptions = {};
   } else {
     // Render into a wrapper for the page-enter animation
     const holder = document.createDocumentFragment();
@@ -194,10 +179,12 @@ function renderRoute(routeId) {
 }
 
 let routeOptions = {};
+let lastNavigateTarget = null;
 
 function navigate(routeId, options) {
   const target = ROUTES.some((r) => r.id === routeId) ? routeId : DEFAULT_ROUTE;
   routeOptions = options || {};
+  lastNavigateTarget = target;
   if (currentRouteFromHash() === target) {
     renderRoute(target);
     return;
@@ -271,7 +258,12 @@ function init() {
 
   buildNav();
 
-  window.addEventListener('hashchange', () => { routeOptions = {}; renderRoute(currentRouteFromHash()); });
+  // Route options are only meaningful for the navigation that set them, so they
+  // are consumed once. A hashchange triggered BY navigate() must keep them.
+  window.addEventListener('hashchange', () => {
+    const hashChangedByNavigate = location.hash.startsWith(`#/${lastNavigateTarget}`);
+    renderRoute(currentRouteFromHash(), { keepOptions: hashChangedByNavigate });
+  });
   renderRoute(currentRouteFromHash());
 
   // Follow OS theme changes only while the user has not chosen explicitly.

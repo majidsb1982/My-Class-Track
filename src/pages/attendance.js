@@ -43,6 +43,13 @@ export function renderAttendance(container, options = {}) {
 
   container.append(pageHead('حضور', 'پیگیری حضور در دو نوبت'));
 
+  // Opened straight from the home shortcut — go to the door without a tap.
+  // The flag is cleared so exiting the door does not re-open it.
+  if (options.door) {
+    const { door, ...rest } = options;
+    openDoorMode(container, date, rest);
+  }
+
   // Session header
   container.append(el('div', { class: 'card' }, [
     el('div', { class: 'row-between' }, [
