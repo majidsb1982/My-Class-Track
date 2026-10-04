@@ -2,6 +2,7 @@
 .DS_Store
 Thumbs.db
 *.log
+.vscode/
 
 # local tooling
 node_modules/
