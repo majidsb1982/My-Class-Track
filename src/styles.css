@@ -455,6 +455,73 @@ a:hover { text-decoration: underline; }
 .list-item__title { font-weight: 700; }
 .list-item__meta { color: var(--color-text-muted); font-size: 0.82rem; }
 
+/* ---------- Badge row & list actions ---------- */
+.badge-row { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.list-item__actions { display: flex; align-items: center; gap: var(--space-1); flex: none; }
+.icon-btn--danger { color: var(--color-danger); }
+.icon-btn--danger:hover { background: var(--color-danger-soft); }
+.list-item--muted { opacity: 0.65; }
+
+/* ---------- Archive disclosure ---------- */
+.archive-box {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-2);
+}
+.archive-box > summary {
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.9rem;
+  min-height: var(--touch-min);
+  display: flex;
+  align-items: center;
+}
+
+/* ---------- Segmented control ---------- */
+.segmented {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+.segmented__item {
+  min-height: 40px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-weight: 700;
+  font-size: 0.88rem;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.segmented__item:hover { color: var(--color-text); }
+.segmented__item.is-active {
+  background: var(--color-surface);
+  color: var(--color-primary);
+  box-shadow: var(--shadow-xs);
+}
+
+/* ---------- Period (new period) rows ---------- */
+.period-list { display: flex; flex-direction: column; gap: var(--space-4); max-height: 50vh; overflow-y: auto; }
+.period-row {
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+}
+.period-row__name { font-weight: 700; margin-bottom: var(--space-2); }
+
+/* ---------- Form dialog ---------- */
+.dialog--form { max-height: 88dvh; overflow-y: auto; }
+.dialog__form { display: block; }
+.dialog__form .dialog__actions { margin-top: var(--space-5); }
+
 /* ---------- Empty state ---------- */
 .empty-state {
   display: flex;
@@ -704,7 +771,10 @@ a:hover { text-decoration: underline; }
 .center { text-align: center; }
 .stack-3 { display: flex; flex-direction: column; gap: var(--space-3); }
 .row-between { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.mt-2 { margin-top: var(--space-2); }
 .mt-4 { margin-top: var(--space-4); }
+.mt-6 { margin-top: var(--space-6); }
+.mb-4 { margin-bottom: var(--space-4); }
 .grow { flex: 1; }
 
 /* ---------- Print ---------- */

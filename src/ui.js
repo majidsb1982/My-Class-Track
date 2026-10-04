@@ -8,7 +8,6 @@ import {
   WEEKDAY_SHORT,
   todayJalali,
   toGregorian,
-  toJalali,
   jalaliMonthLength,
   formatJalali,
   isValidJalali,
@@ -285,6 +284,12 @@ export function createJalaliDatePicker(options = {}) {
     document.removeEventListener('keydown', onKey);
   }
 
+  /** Tear the picker down completely (used when a hosting dialog closes). */
+  function destroy() {
+    close();
+    root.remove();
+  }
+
   function onDocClick(e) {
     if (!root.contains(e.target)) close();
   }
@@ -376,17 +381,222 @@ export function createJalaliDatePicker(options = {}) {
 
   renderValue();
 
-  return {
+  const api = {
     root,
+    destroy,
     getValue: () => (selected ? { ...selected } : null),
     setValue: (v) => { selected = v ? { ...v } : null; renderValue(); },
   };
+  root.__picker = api; // lets a hosting dialog tear this picker down
+  return api;
 }
 
 /** Validate a Jalali y/m/d; returns an error message in Persian or null. */
 export function jalaliError(jy, jm, jd) {
   if (!isValidJalali(jy, jm, jd)) return 'تاریخ وارد‌شده معتبر نیست.';
   return null;
+}
+
+/* ---------- Form fields ---------- */
+
+/**
+ * Build a labelled field wrapper.
+ * @param {string} label
+ * @param {Node|Node[]} control
+ * @param {string} [hint]
+ */
+export function field(label, control, hint) {
+  const id = `f_${Math.random().toString(36).slice(2, 8)}`;
+  const controls = Array.isArray(control) ? control : [control];
+  const labelEl = el('label', { class: 'field__label', for: id }, label);
+  controls.forEach((c) => { if (c && c.setAttribute && !c.id) c.id = id; });
+  return el('div', { class: 'field' }, [
+    labelEl,
+    ...controls,
+    hint ? el('span', { class: 'field__hint' }, hint) : null,
+  ]);
+}
+
+/**
+ * A text input with an inline error slot.
+ * Returns { root, input, setError, getValue, setValue }.
+ */
+export function textField({ label, type = 'text', placeholder = '', value = '', hint = '', inputMode } = {}) {
+  const input = el('input', {
+    class: 'input', type, placeholder,
+    value: value == null ? '' : String(value),
+    autocomplete: 'off',
+  });
+  if (inputMode) input.setAttribute('inputmode', inputMode);
+  const errorEl = el('span', { class: 'field__error', role: 'alert' });
+  errorEl.hidden = true;
+
+  const id = `f_${Math.random().toString(36).slice(2, 8)}`;
+  input.id = id;
+  const root = el('div', { class: 'field' }, [
+    el('label', { class: 'field__label', for: id }, label),
+    input,
+    hint ? el('span', { class: 'field__hint' }, hint) : null,
+    errorEl,
+  ]);
+
+  return {
+    root,
+    input,
+    getValue: () => input.value.trim(),
+    setValue: (v) => { input.value = v == null ? '' : String(v); },
+    setError: (msg) => {
+      if (msg) {
+        errorEl.textContent = msg;
+        errorEl.hidden = false;
+        input.setAttribute('aria-invalid', 'true');
+      } else {
+        errorEl.textContent = '';
+        errorEl.hidden = true;
+        input.removeAttribute('aria-invalid');
+      }
+    },
+  };
+}
+
+/**
+ * A multi-line textarea with an inline error slot.
+ */
+export function textAreaField({ label, placeholder = '', value = '', hint = '' } = {}) {
+  const input = el('textarea', { class: 'textarea', placeholder });
+  input.value = value == null ? '' : String(value);
+  const errorEl = el('span', { class: 'field__error', role: 'alert' });
+  errorEl.hidden = true;
+  const id = `f_${Math.random().toString(36).slice(2, 8)}`;
+  input.id = id;
+
+  const root = el('div', { class: 'field' }, [
+    el('label', { class: 'field__label', for: id }, label),
+    input,
+    hint ? el('span', { class: 'field__hint' }, hint) : null,
+    errorEl,
+  ]);
+
+  return {
+    root,
+    input,
+    getValue: () => input.value.trim(),
+    setValue: (v) => { input.value = v == null ? '' : String(v); },
+    setError: (msg) => {
+      if (msg) {
+        errorEl.textContent = msg;
+        errorEl.hidden = false;
+        input.setAttribute('aria-invalid', 'true');
+      } else {
+        errorEl.textContent = '';
+        errorEl.hidden = true;
+        input.removeAttribute('aria-invalid');
+      }
+    },
+  };
+}
+
+/**
+ * A group of role checkboxes rendered as touch-friendly chips.
+ * @param {{key:string,label:string}[]} options
+ * @param {string[]} selected
+ */
+export function checkboxChips(options, selected = []) {
+  const root = el('div', { class: 'checkbox-row', role: 'group' });
+  const inputs = new Map();
+  options.forEach((opt) => {
+    const input = el('input', { type: 'checkbox' });
+    input.checked = selected.includes(opt.key);
+    input.value = opt.key;
+    const chip = el('label', { class: 'check-chip' }, [input, el('span', {}, opt.label)]);
+    inputs.set(opt.key, input);
+    root.append(chip);
+  });
+  return {
+    root,
+    getValue: () => [...inputs.entries()].filter(([, i]) => i.checked).map(([k]) => k),
+    setValue: (keys) => { inputs.forEach((i, k) => { i.checked = keys.includes(k); }); },
+  };
+}
+
+/* ---------- Form modal ---------- */
+
+/**
+ * Open a modal that hosts a form. The caller supplies the body node and a
+ * submit handler that returns an errors map (or null/{} for success).
+ *
+ * @param {Object} options
+ *   title, body (Node), submitLabel, cancelLabel,
+ *   onSubmit: () => (errors|null)   — return errors to keep the dialog open
+ *   onClose: () => void
+ * @returns {{close:()=>void}}
+ */
+export function formModal(options = {}) {
+  const {
+    title = '',
+    body,
+    submitLabel = 'ذخیره',
+    cancelLabel = 'انصراف',
+    onSubmit = () => null,
+    onClose = () => {},
+  } = options;
+
+  const previouslyFocused = document.activeElement;
+  let closed = false;
+
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    document.removeEventListener('keydown', onKey);
+    // Tear down any date pickers opened inside this dialog so their popups and
+    // document-level listeners cannot outlive it.
+    dialog.querySelectorAll('.date-field').forEach((f) => f.__picker?.destroy());
+    backdrop.remove();
+    if (previouslyFocused && previouslyFocused.focus) previouslyFocused.focus();
+    onClose();
+  };
+
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+
+  const form = el('form', { class: 'dialog__form', novalidate: true });
+
+  const cancelBtn = el('button', {
+    type: 'button', class: 'btn btn--secondary', onclick: close,
+  }, cancelLabel);
+
+  const submitBtn = el('button', {
+    type: 'submit', class: 'btn btn--primary',
+  }, submitLabel);
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const errors = onSubmit();
+    if (errors && Object.keys(errors).length) return; // keep open, caller shows errors
+    close();
+  });
+
+  form.append(body, el('div', { class: 'dialog__actions' }, [cancelBtn, submitBtn]));
+
+  const dialog = el('div', {
+    class: 'dialog dialog--form', role: 'dialog', 'aria-modal': 'true',
+  }, [
+    el('h2', { class: 'dialog__title' }, title),
+    form,
+  ]);
+
+  const backdrop = el('div', {
+    class: 'dialog-backdrop',
+    onclick: (e) => { if (e.target === backdrop) close(); },
+  }, dialog);
+
+  document.addEventListener('keydown', onKey);
+  document.body.append(backdrop);
+
+  // Focus the first focusable control for keyboard users.
+  const first = dialog.querySelector('input, textarea, select, button');
+  if (first) first.focus();
+
+  return { close };
 }
 
 export default {
@@ -400,4 +610,9 @@ export default {
   pageHead,
   createJalaliDatePicker,
   jalaliError,
+  field,
+  textField,
+  textAreaField,
+  checkboxChips,
+  formModal,
 };
