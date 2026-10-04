@@ -777,6 +777,219 @@ a:hover { text-decoration: underline; }
 .mb-4 { margin-bottom: var(--space-4); }
 .grow { flex: 1; }
 
+/* ---------- Attendance: session & progress ---------- */
+.session-label { font-weight: 800; font-size: 1.02rem; }
+.list-item--active { border-color: var(--color-primary); box-shadow: 0 0 0 2px var(--color-primary-soft); }
+
+.progress-wrap { margin-bottom: var(--space-4); }
+.progress-text { font-size: 0.86rem; font-weight: 700; color: var(--color-text-muted); margin-bottom: var(--space-2); }
+.progress-bar {
+  height: 10px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  overflow: hidden;
+}
+.progress-bar__fill {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, var(--color-primary), var(--color-primary-strong));
+  transition: width var(--dur-base) var(--ease);
+}
+
+/* ---------- Attendance: member card ---------- */
+.attend-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  animation: listIn var(--dur-base) var(--ease) both;
+}
+.attend-card + .attend-card { margin-top: var(--space-3); }
+.attend-card__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); }
+.attend-card__name { font-weight: 800; font-size: 1.02rem; }
+
+.status-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-2); }
+.status-btn {
+  min-height: var(--touch-min);
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--color-border);
+  background: var(--color-surface);
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  padding: var(--space-2);
+  transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+  -webkit-tap-highlight-color: transparent;
+}
+.status-btn:active { transform: scale(0.96); }
+.status-btn--success.is-active { background: var(--color-success-soft); border-color: var(--color-success); color: var(--color-success); }
+.status-btn--warning.is-active { background: var(--color-warning-soft); border-color: var(--color-warning); color: var(--color-warning); }
+.status-btn--danger.is-active { background: var(--color-danger-soft); border-color: var(--color-danger); color: var(--color-danger); }
+.status-btn--problem.is-active { background: var(--color-problem-soft); border-color: var(--color-problem); color: var(--color-problem); }
+.attend-extras:not(:empty) { margin-top: var(--space-3); }
+
+/* ---------- Door mode (full screen) ---------- */
+.door-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg);
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+.door__topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  padding-top: calc(var(--space-3) + env(safe-area-inset-top, 0));
+}
+.door__title { flex: 1; min-width: 0; }
+.door__title-main { font-weight: 800; font-size: 1.05rem; }
+.door__title-sub { color: var(--color-text-muted); font-size: 0.78rem; }
+.door__count {
+  font-weight: 800;
+  font-size: 0.95rem;
+  color: var(--color-primary);
+  background: var(--color-primary-soft);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-pill);
+  flex: none;
+}
+.door__list { flex: 1; overflow-y: auto; padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-4); }
+.door__empty { text-align: center; color: var(--color-text-muted); padding: var(--space-8); }
+.door__footer {
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border);
+}
+
+.door-card {
+  background: var(--color-surface);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  transition: border-color var(--dur-fast) var(--ease), opacity var(--dur-fast) var(--ease);
+}
+.door-card.is-done { opacity: 0.72; border-color: var(--color-success); }
+.door-card__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); }
+.door-card__name { font-weight: 800; font-size: 1.25rem; }
+.door-card__head-right { display: flex; align-items: center; gap: var(--space-2); flex: none; }
+.door-card__call {
+  display: grid;
+  place-items: center;
+  width: 46px; height: 46px;
+  border-radius: var(--radius-md);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  flex: none;
+}
+.door-card__call:hover { text-decoration: none; background: var(--color-primary-strong); }
+.door-card__call .icon-slot { width: 22px; height: 22px; }
+
+.door-card__actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-2); }
+.door-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 66px;
+  border-radius: var(--radius-md);
+  border: 2px solid var(--color-border);
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  cursor: pointer;
+  transition: transform var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+  -webkit-tap-highlight-color: transparent;
+}
+.door-btn:active { transform: scale(0.94); }
+.door-btn__icon { font-size: 1.3rem; line-height: 1; }
+.door-btn__label { font-size: 0.8rem; font-weight: 700; }
+.door-btn--success.is-active { background: var(--color-success); border-color: var(--color-success); color: #fff; }
+.door-btn--warning.is-active { background: var(--color-warning); border-color: var(--color-warning); color: #fff; }
+.door-btn--danger.is-active { background: var(--color-danger); border-color: var(--color-danger); color: #fff; }
+.door-btn--problem.is-active { background: var(--color-problem); border-color: var(--color-problem); color: #fff; }
+.door-card__recorded { margin-top: var(--space-3); font-size: 0.84rem; font-weight: 700; color: var(--color-text-muted); }
+
+/* ---------- Door timer (full screen) ---------- */
+.timer-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(160deg, var(--color-bg), var(--color-surface-2));
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+.timer__topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  padding-top: calc(var(--space-3) + env(safe-area-inset-top, 0));
+}
+.timer__topbar-title { flex: 1; text-align: center; font-weight: 800; }
+.timer__topbar-spacer { width: var(--touch-min); }
+.timer__body { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-4); padding: var(--space-4); text-align: center; }
+.timer__time {
+  font-size: clamp(3rem, 18vw, 6rem);
+  font-weight: 800;
+  letter-spacing: 2px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  color: var(--color-primary);
+}
+.timer__time--done { color: var(--color-success); }
+.timer__status { font-size: 1.1rem; font-weight: 700; }
+.timer__target { color: var(--color-text-muted); font-size: 0.88rem; }
+.timer__controls { padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); }
+
+/* ---------- Alarm overlay ---------- */
+.alarm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  background: rgba(11, 12, 26, 0.86);
+  backdrop-filter: blur(4px);
+  padding: var(--space-5);
+  animation: fadeIn var(--dur-fast) var(--ease) both;
+}
+.alarm-overlay__content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-6);
+  text-align: center;
+  max-width: 520px;
+}
+.alarm-overlay__icon {
+  display: grid;
+  place-items: center;
+  width: 96px; height: 96px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  animation: alarmPulse 1.2s var(--ease) infinite;
+}
+.alarm-overlay__icon .icon-slot { width: 48px; height: 48px; }
+.alarm-overlay__message {
+  color: #fff;
+  font-size: clamp(1.5rem, 7vw, 2.4rem);
+  font-weight: 800;
+  line-height: 1.5;
+}
+@keyframes alarmPulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(139, 139, 240, 0.6); }
+  50% { transform: scale(1.06); box-shadow: 0 0 0 18px rgba(139, 139, 240, 0); }
+}
+
 /* ---------- Print ---------- */
 @media print {
   :root { --color-bg: #fff; --color-surface: #fff; --color-text: #000; }

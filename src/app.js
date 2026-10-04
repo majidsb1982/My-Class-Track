@@ -9,6 +9,7 @@ import { runSelfTest } from './jalali.js';
 import { load as loadStore, subscribe as subscribeStore } from './store.js';
 import { renderMembers } from './pages/members.js';
 import { renderSettings } from './pages/settings.js';
+import { renderAttendance } from './pages/attendance.js';
 
 /* ---------- Routes ---------- */
 
@@ -32,13 +33,6 @@ const PLACEHOLDERS = {
     actionLabel: 'شروع از اعضا',
     actionRoute: 'members',
   },
-  attendance: {
-    icon: 'attendance',
-    title: 'هنوز عضوی ثبت نشده است',
-    text: 'برای پیگیری حضور، ابتدا اعضای کلاس را اضافه کنید.',
-    actionLabel: 'افزودن اعضا',
-    actionRoute: 'members',
-  },
   payment: {
     icon: 'payment',
     title: 'وضعیت شهریه‌ای ثبت نشده',
@@ -55,10 +49,12 @@ const PLACEHOLDERS = {
   },
 };
 
-/* Routes that have a real implementation (phase 3+). */
+/* Routes that have a real implementation (phase 3+). Each page receives the
+   container and a small context object (navigate + route options). */
 const PAGES = {
-  members: renderMembers,
-  settings: renderSettings,
+  members: (container) => renderMembers(container),
+  settings: (container) => renderSettings(container),
+  attendance: (container, ctx) => renderAttendance(container, ctx),
 };
 
 /* ---------- Theme & preferences ---------- */
@@ -181,7 +177,7 @@ function renderRoute(routeId) {
 
   const renderPage = PAGES[route.id];
   if (renderPage) {
-    renderPage(page);
+    renderPage(page, { navigate, ...routeOptions });
   } else {
     // Render into a wrapper for the page-enter animation
     const holder = document.createDocumentFragment();
@@ -197,8 +193,11 @@ function renderRoute(routeId) {
   window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
 }
 
-function navigate(routeId) {
+let routeOptions = {};
+
+function navigate(routeId, options) {
   const target = ROUTES.some((r) => r.id === routeId) ? routeId : DEFAULT_ROUTE;
+  routeOptions = options || {};
   if (currentRouteFromHash() === target) {
     renderRoute(target);
     return;
@@ -256,9 +255,11 @@ function init() {
   updateThemeButton();
 
   loadStore();
-  // Re-render the current page whenever stored data changes.
+  // Re-render the current page whenever stored data changes — but never while a
+  // full-screen mode (door / timer) owns the screen, since it manages itself.
   subscribeStore(() => {
     if (!document.getElementById('main-content')) return;
+    if (document.querySelector('.door-screen, .timer-screen')) return;
     renderRoute(currentRouteFromHash());
   });
 
@@ -270,7 +271,7 @@ function init() {
 
   buildNav();
 
-  window.addEventListener('hashchange', () => renderRoute(currentRouteFromHash()));
+  window.addEventListener('hashchange', () => { routeOptions = {}; renderRoute(currentRouteFromHash()); });
   renderRoute(currentRouteFromHash());
 
   // Follow OS theme changes only while the user has not chosen explicitly.
