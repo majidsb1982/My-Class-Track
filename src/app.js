@@ -6,6 +6,9 @@
 
 import { el, clear, icon, hydrateStaticIcons, toast, confirmDialog, emptyState, pageHead } from './ui.js';
 import { runSelfTest } from './jalali.js';
+import { load as loadStore, subscribe as subscribeStore } from './store.js';
+import { renderMembers } from './pages/members.js';
+import { renderSettings } from './pages/settings.js';
 
 /* ---------- Routes ---------- */
 
@@ -50,20 +53,12 @@ const PLACEHOLDERS = {
     actionLabel: 'تنظیمات کلاس',
     actionRoute: 'settings',
   },
-  members: {
-    icon: 'members',
-    title: 'فهرست اعضا خالی است',
-    text: 'اعضای کلاس را با نام، شماره تماس، تاریخ تولد و نقش‌ها اضافه کنید.',
-    actionLabel: 'افزودن اولین عضو',
-    actionRoute: null, // phase 3
-  },
-  settings: {
-    icon: 'settings',
-    title: 'تنظیمات کلاس',
-    text: 'روز و ساعت کلاس‌های هفتگی، تم و اندازه فونت را اینجا تنظیم می‌کنید.',
-    actionLabel: 'بازگشت به خانه',
-    actionRoute: 'home',
-  },
+};
+
+/* Routes that have a real implementation (phase 3+). */
+const PAGES = {
+  members: renderMembers,
+  settings: renderSettings,
 };
 
 /* ---------- Theme & preferences ---------- */
@@ -184,16 +179,16 @@ function renderRoute(routeId) {
   main.append(el('div', { class: 'page-enter' }, []));
   const page = main.firstElementChild;
 
-  // Render into a wrapper for the page-enter animation
-  const holder = document.createDocumentFragment();
-  const temp = el('div', {}, []);
-  renderPlaceholder(temp, route);
-  while (temp.firstChild) holder.append(temp.firstChild);
-  page.append(holder);
-
-  // Home also gets a phase-2 calendar demo card (removable later)
-  if (route.id === 'home') {
-    page.append(buildCalendarDemoCard());
+  const renderPage = PAGES[route.id];
+  if (renderPage) {
+    renderPage(page);
+  } else {
+    // Render into a wrapper for the page-enter animation
+    const holder = document.createDocumentFragment();
+    const temp = el('div', {}, []);
+    renderPlaceholder(temp, route);
+    while (temp.firstChild) holder.append(temp.firstChild);
+    page.append(holder);
   }
 
   setActiveNav(route.id);
@@ -209,29 +204,6 @@ function navigate(routeId) {
     return;
   }
   location.hash = `#/${target}`;
-}
-
-/* ---------- Phase 2: calendar demo card ---------- */
-
-function buildCalendarDemoCard() {
-  const card = el('section', { class: 'card mt-4' }, []);
-  card.append(el('h3', { class: 'card__title' }, [icon('calendar'), 'تقویم شمسی']));
-  card.append(el('p', { class: 'muted' }, 'یک تاریخ را انتخاب کنید تا درستی تقویم شمسی را ببینید. این کارت نمونه است و در فازهای بعد جای آن را صفحه‌های اصلی می‌گیرند.'));
-
-  const field = document.createElement('div');
-  field.className = 'mt-4';
-  import('./ui.js').then(({ createJalaliDatePicker }) => {
-    const picker = createJalaliDatePicker({
-      placeholder: 'انتخاب تاریخ نمونه',
-      onChange: (v) => {
-        if (v) toast(`تاریخ انتخابی ثبت شد.`, 'success', 1600);
-      },
-    });
-    field.append(picker.root);
-  });
-
-  card.append(field);
-  return card;
 }
 
 /* ---------- Quick help ---------- */
@@ -282,6 +254,13 @@ function init() {
   applyFontSize(prefs.fontSize);
   hydrateStaticIcons();
   updateThemeButton();
+
+  loadStore();
+  // Re-render the current page whenever stored data changes.
+  subscribeStore(() => {
+    if (!document.getElementById('main-content')) return;
+    renderRoute(currentRouteFromHash());
+  });
 
   const themeBtn = document.getElementById('theme-toggle');
   if (themeBtn) themeBtn.addEventListener('click', toggleTheme);
