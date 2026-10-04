@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>آفلاین — My-Class-Track</title>
+  <link rel="stylesheet" href="src/styles.css" />
+</head>
+
+<body>
+  <main class="offline-page">
+    <div class="offline-card">
+      <div class="offline-card__icon" aria-hidden="true">📡</div>
+      <h1 class="offline-card__title">اتصال اینترنت قطع است</h1>
+      <p class="offline-card__text">
+        این صفحه در دسترس نیست، اما برنامه همچنان آفلاین کار می‌کند.
+        اگر قبلاً برنامه را باز کرده‌اید، به صفحه اصلی برگردید.
+      </p>
+      <a class="btn btn--primary btn--lg" href="./index.html">بازگشت به برنامه</a>
+    </div>
+  </main>
+
+  <style>
+    /* Self-contained so this page renders even if the stylesheet is missing. */
+    .offline-page {
+      min-height: 100dvh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      font-family: "Vazirmatn", "Segoe UI", Tahoma, system-ui, sans-serif;
+      background: #f4f5fb;
+      color: #1b1d2b;
+    }
+
+    .offline-card {
+      max-width: 420px;
+      text-align: center;
+      background: #fff;
+      border: 1px solid #e2e4f0;
+      border-radius: 26px;
+      padding: 40px 28px;
+      box-shadow: 0 18px 48px rgba(23, 25, 51, 0.12);
+    }
+
+    .offline-card__icon {
+      font-size: 52px;
+      line-height: 1;
+    }
+
+    .offline-card__title {
+      margin: 16px 0 8px;
+      font-size: 1.25rem;
+    }
+
+    .offline-card__text {
+      margin: 0 0 24px;
+      color: #6b6f86;
+      line-height: 1.9;
+    }
+
+    .offline-card .btn {
+      text-decoration: none;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      .offline-page {
+        background: #101121;
+        color: #eef0fb;
+      }
+
+      .offline-card {
+        background: #1a1c31;
+        border-color: #2c2f52;
+      }
+
+      .offline-card__text {
+        color: #a4a8c4;
+      }
+    }
+  </style>
+</body>
+
+</html>
