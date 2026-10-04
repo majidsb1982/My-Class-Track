@@ -16,6 +16,7 @@ import {
 import { todayJalali, formatJalali, jalaliWeekdayName, toPersianDigits, toGregorian } from '../jalali.js';
 import { renderDoorMode } from './door.js';
 import { renderTimer } from '../timer.js';
+import { openReport } from '../reports.js';
 
 /* ---------- Helpers ---------- */
 
@@ -93,6 +94,10 @@ export function renderAttendance(container, options = {}) {
   const round1 = el('section', { class: 'section mt-6' });
   round1.append(el('h3', { class: 'section__title' }, [icon('attendance'), 'نوبت ۱ — پیش‌تماس']));
   round1.append(renderProgress(fresh, 1, members.length));
+  round1.append(el('button', {
+    type: 'button', class: 'btn btn--secondary btn--block no-print',
+    onclick: () => openReport(fresh.id, 'attendance', 1),
+  }, 'گزارش نوبت ۱'));
   round1.append(renderRoundList(fresh, 1, members, container, date, options));
   container.append(round1);
 }
@@ -276,7 +281,7 @@ function sessionOption(date, currentDate, container, options, isPast = false) {
 
 function openDoorMode(container, date, options) {
   const session = ensureSession(date.jy, date.jm, date.jd);
-  renderDoorMode(container, {
+  renderDoorMode({
     date,
     session,
     onExit: () => {

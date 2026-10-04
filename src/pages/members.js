@@ -12,6 +12,7 @@ import {
   ROLES, ROLE_KEYS, getMembers, saveMember, archiveMember,
   getPeriods, getData, importData,
 } from '../store.js';
+import { membersCsv, downloadCsv } from '../reports.js';
 import { formatJalali, jalaliWeekdayName, todayJalali, toPersianDigits } from '../jalali.js';
 
 let searchTerm = '';
@@ -29,6 +30,13 @@ export function renderMembers(container) {
       type: 'button', class: 'btn btn--secondary',
       onclick: () => openNewPeriod(),
     }, [icon('sparkles'), 'دوره جدید']),
+    el('button', {
+      type: 'button', class: 'btn btn--ghost',
+      onclick: () => {
+        downloadCsv(`members-${todayStamp()}.csv`, membersCsv());
+        toast('فهرست اعضا به‌صورت CSV دریافت شد.', 'success');
+      },
+    }, 'CSV اعضا'),
   ]));
 
   // Search
@@ -358,6 +366,11 @@ function showPeriodDetail(period) {
 }
 
 /* ---------- Utilities ---------- */
+
+function todayStamp() {
+  const t = todayJalali();
+  return `${t.jy}-${String(t.jm).padStart(2, '0')}-${String(t.jd).padStart(2, '0')}`;
+}
 
 function rerender() {
   const main = document.getElementById('main-content');

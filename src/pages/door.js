@@ -4,19 +4,19 @@
    Designed to be used standing up, in a hurry, one-handed.
    ============================================================ */
 
-import { el, icon, toast } from '../ui.js';
+import { el, icon } from '../ui.js';
 import {
   ATTENDANCE_STATUS, STATUS_KEYS,
   getMembers, getSession, setAttendance, attendanceProgress,
 } from '../store.js';
 import { formatJalali, jalaliWeekdayName, toPersianDigits } from '../jalali.js';
+import { reportPanel } from '../reports.js';
 
 /**
- * Render door mode into the container, replacing its content.
- * @param {HTMLElement} container
+ * Mount the full-screen at-the-door mode on <body>.
  * @param {Object} options { date, session, onExit }
  */
-export function renderDoorMode(container, options = {}) {
+export function renderDoorMode(options = {}) {
   const { date, onExit = () => {} } = options;
   const sessionId = options.session.id;
 
@@ -50,15 +50,34 @@ export function renderDoorMode(container, options = {}) {
     el('button', {
       type: 'button', class: 'btn btn--primary btn--lg btn--block',
       onclick: () => {
-        const s = getSession(sessionId);
-        const done = attendanceProgress(s, 2);
-        const total = getMembers().length;
-        toast(`نوبت ۲: ${toPersianDigits(done)} از ${toPersianDigits(total)} نفر ثبت شد.`, 'success', 2600);
+        showRound2Report();
       },
     }, [icon('check'), 'گزارش این نوبت']),
   ]));
 
   renderList();
+
+  /* ---------- Round 2 report ---------- */
+
+  /**
+   * Show the round-2 report as a full-screen sheet over the door mode: big,
+   * selectable text plus copy / share / CSV / print.
+   */
+  function showRound2Report() {
+    document.querySelector('.door-report')?.remove();
+    const panel = reportPanel(sessionId, 'attendance', 2);
+    panel.classList.add('door-report');
+    const sheet = el('div', { class: 'door-report__sheet' }, [
+      el('div', { class: 'door-report__bar' }, [
+        el('button', {
+          type: 'button', class: 'icon-btn', 'aria-label': 'بستن گزارش',
+          onclick: () => sheet.remove(),
+        }, icon('close')),
+      ]),
+      panel,
+    ]);
+    document.body.append(sheet);
+  }
 
   /* ---------- Rendering ---------- */
 

@@ -7,8 +7,9 @@
 import {
   el, icon, toast, confirmDialog, pageHead, formModal,
 } from '../ui.js';
-import { getSchedule, saveScheduleEntry, deleteScheduleEntry } from '../store.js';
-import { WEEKDAY_NAMES, toPersianDigits, formatTime } from '../jalali.js';
+import { getSchedule, saveScheduleEntry, deleteScheduleEntry, getSessions } from '../store.js';
+import { WEEKDAY_NAMES, toPersianDigits, formatTime, formatJalali } from '../jalali.js';
+import { paymentsCsv, downloadCsv, openReport } from '../reports.js';
 
 const APP_VERSION = 'v1.0.0';
 
@@ -28,6 +29,7 @@ export function renderSettings(container) {
   container.append(pageHead('تنظیمات', 'کلاس، ظاهر برنامه و مدیریت داده‌ها'));
 
   container.append(renderScheduleCard());
+  container.append(renderReportsCard());
   container.append(renderAppearanceCard());
   container.append(renderAboutCard());
 }
@@ -154,6 +156,47 @@ function openScheduleForm(entry) {
       return null;
     },
   });
+}
+
+/* ---------- Reports ---------- */
+
+function renderReportsCard() {
+  const card = el('section', { class: 'card' }, []);
+  card.append(el('h3', { class: 'card__title' }, [icon('attendance'), 'گزارش‌ها']));
+
+  const sessions = getSessions();
+  if (!sessions.length) {
+    card.append(el('p', { class: 'muted' }, 'هنوز جلسه‌ای ثبت نشده است. پس از ثبت حضور، گزارش هر جلسه اینجا در دسترس خواهد بود.'));
+    return card;
+  }
+
+  const select = el('select', { class: 'select', 'aria-label': 'انتخاب جلسه' });
+  sessions.forEach((s) => {
+    const label = `${formatJalali(s.jy, s.jm, s.jd)}`;
+    select.append(el('option', { value: s.id }, label));
+  });
+
+  const actions = el('div', { class: 'btn-row mt-3' }, [
+    el('button', {
+      type: 'button', class: 'btn btn--secondary grow',
+      onclick: () => openReport(select.value, 'payment'),
+    }, 'گزارش شهریه'),
+    el('button', {
+      type: 'button', class: 'btn btn--secondary grow',
+      onclick: () => {
+        const s = sessions.find((x) => x.id === select.value) || sessions[0];
+        downloadCsv(`shahrie-${String(s.jy)}-${String(s.jm).padStart(2, '0')}-${String(s.jd).padStart(2, '0')}.csv`, paymentsCsv(s.id));
+        toast('فایل CSV شهریه دریافت شد.', 'success');
+      },
+    }, 'CSV شهریه'),
+  ]);
+
+  card.append(el('div', { class: 'field' }, [
+    el('span', { class: 'field__label' }, 'جلسه'),
+    select,
+  ]));
+  card.append(actions);
+  return card;
 }
 
 /* ---------- Appearance ---------- */
