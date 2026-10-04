@@ -1,0 +1,248 @@
+/* ============================================================
+   src/pages/settings.js — Settings page (phase 3)
+   Weekly class schedule + theme + font size.
+   Backup/restore UI arrives in phase 6.
+   ============================================================ */
+
+import {
+  el, icon, toast, confirmDialog, pageHead, formModal,
+} from '../ui.js';
+import { getSchedule, saveScheduleEntry, deleteScheduleEntry } from '../store.js';
+import { WEEKDAY_NAMES, toPersianDigits, formatTime } from '../jalali.js';
+
+const APP_VERSION = 'v1.0.0';
+
+/* ---------- Preferences (mirrors app.js; single source per key) ---------- */
+
+const PREF_KEY = 'mct:prefs';
+
+function loadPrefs() {
+  try { return JSON.parse(localStorage.getItem(PREF_KEY)) || {}; } catch { return {}; }
+}
+function savePrefs(prefs) {
+  try { localStorage.setItem(PREF_KEY, JSON.stringify(prefs)); } catch { /* ignore */ }
+}
+
+/** Render the settings page into the given container. */
+export function renderSettings(container) {
+  container.append(pageHead('تنظیمات', 'کلاس، ظاهر برنامه و مدیریت داده‌ها'));
+
+  container.append(renderScheduleCard());
+  container.append(renderAppearanceCard());
+  container.append(renderAboutCard());
+}
+
+/* ---------- Schedule ---------- */
+
+function renderScheduleCard() {
+  const card = el('section', { class: 'card' }, []);
+  card.append(el('h3', { class: 'card__title' }, [icon('clock'), 'کلاس‌های هفتگی']));
+
+  const list = getSchedule();
+  const listWrap = el('div', {});
+
+  if (!list.length) {
+    listWrap.append(el('p', { class: 'muted' }, 'هنوز کلاسی تعریف نشده است. برای شمارش معکوس و تایمر پشت در، روز و ساعت کلاس را اضافه کنید.'));
+  } else {
+    const ul = el('ul', { class: 'list' });
+    list
+      .slice()
+      .sort((a, b) => a.weekday - b.weekday)
+      .forEach((c) => ul.append(renderScheduleItem(c)));
+    listWrap.append(ul);
+  }
+  card.append(listWrap);
+
+  card.append(el('div', { class: 'mt-4' }, [
+    el('button', {
+      type: 'button', class: 'btn btn--secondary btn--block',
+      onclick: () => openScheduleForm(null),
+    }, [icon('plus'), 'افزودن کلاس هفتگی']),
+  ]));
+
+  return card;
+}
+
+function renderScheduleItem(c) {
+  const item = el('li', { class: 'list-item' }, [
+    el('div', { class: 'list-item__body' }, [
+      el('div', { class: 'list-item__title' }, WEEKDAY_NAMES[c.weekday] || '—'),
+      el('div', { class: 'list-item__meta' }, `از ${formatTime(...parseTime(c.start))} تا ${formatTime(...parseTime(c.end))}`),
+    ]),
+    el('div', { class: 'list-item__actions' }, [
+      el('button', {
+        type: 'button', class: 'icon-btn', 'aria-label': 'ویرایش کلاس',
+        onclick: () => openScheduleForm(c),
+      }, icon('settings')),
+      el('button', {
+        type: 'button', class: 'icon-btn icon-btn--danger', 'aria-label': 'حذف کلاس',
+        onclick: () => askDeleteSchedule(c),
+      }, icon('close')),
+    ]),
+  ]);
+  return item;
+}
+
+function parseTime(t) {
+  const [h, m] = String(t).split(':').map(Number);
+  return [h, m];
+}
+
+async function askDeleteSchedule(c) {
+  const ok = await confirmDialog({
+    title: 'حذف کلاس',
+    text: `کلاس ${WEEKDAY_NAMES[c.weekday]} ساعت ${formatTime(...parseTime(c.start))} حذف شود؟`,
+    confirmText: 'حذف کن',
+    danger: true,
+  });
+  if (!ok) return;
+  deleteScheduleEntry(c.id);
+  toast('کلاس حذف شد.', 'success');
+  rerender();
+}
+
+function openScheduleForm(entry) {
+  const isEdit = !!entry;
+
+  const weekdaySelect = el('select', { class: 'select' });
+  WEEKDAY_NAMES.forEach((name, idx) => {
+    const opt = el('option', { value: String(idx) }, name);
+    if (entry && entry.weekday === idx) opt.selected = true;
+    weekdaySelect.append(opt);
+  });
+
+  const startInput = el('input', { class: 'input', type: 'time', value: entry?.start || '19:00' });
+  const endInput = el('input', { class: 'input', type: 'time', value: entry?.end || '21:00' });
+
+  const startErr = el('span', { class: 'field__error', role: 'alert' }); startErr.hidden = true;
+  const endErr = el('span', { class: 'field__error', role: 'alert' }); endErr.hidden = true;
+
+  const body = el('div', {}, [
+    el('div', { class: 'field' }, [
+      el('label', { class: 'field__label' }, 'روز هفته'),
+      weekdaySelect,
+    ]),
+    el('div', { class: 'field' }, [
+      el('label', { class: 'field__label' }, 'ساعت شروع'),
+      startInput, startErr,
+    ]),
+    el('div', { class: 'field' }, [
+      el('label', { class: 'field__label' }, 'ساعت پایان'),
+      endInput, endErr,
+    ]),
+  ]);
+
+  formModal({
+    title: isEdit ? 'ویرایش کلاس' : 'افزودن کلاس هفتگی',
+    body,
+    submitLabel: isEdit ? 'ذخیره' : 'افزودن',
+    onSubmit: () => {
+      startErr.hidden = true; endErr.hidden = true;
+      const result = saveScheduleEntry({
+        id: entry?.id,
+        weekday: Number(weekdaySelect.value),
+        start: startInput.value,
+        end: endInput.value,
+      });
+      if (!result.ok) {
+        if (result.errors.start) { startErr.textContent = result.errors.start; startErr.hidden = false; }
+        if (result.errors.end) { endErr.textContent = result.errors.end; endErr.hidden = false; }
+        return result.errors;
+      }
+      toast(isEdit ? 'کلاس ویرایش شد.' : 'کلاس افزوده شد.', 'success');
+      rerender();
+      return null;
+    },
+  });
+}
+
+/* ---------- Appearance ---------- */
+
+function renderAppearanceCard() {
+  const prefs = loadPrefs();
+  const card = el('section', { class: 'card' }, []);
+  card.append(el('h3', { class: 'card__title' }, [icon('theme'), 'ظاهر برنامه']));
+
+  // Theme segmented control
+  const currentTheme = document.documentElement.dataset.theme || 'light';
+  card.append(el('div', { class: 'field' }, [
+    el('span', { class: 'field__label' }, 'تم'),
+    segmented([
+      { key: 'light', label: 'روشن' },
+      { key: 'dark', label: 'تیره' },
+    ], currentTheme, (key) => {
+      document.documentElement.dataset.theme = key;
+      prefs.theme = key;
+      savePrefs(prefs);
+      const meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.setAttribute('content', key === 'dark' ? '#101121' : '#5b5bd6');
+      toast(key === 'dark' ? 'تم تیره فعال شد.' : 'تم روشن فعال شد.', 'info', 1400);
+    }),
+  ]));
+
+  // Font size segmented control
+  const currentFont = document.documentElement.dataset.fontsize || 'medium';
+  card.append(el('div', { class: 'field' }, [
+    el('span', { class: 'field__label' }, 'اندازه فونت'),
+    segmented([
+      { key: 'small', label: 'کوچک' },
+      { key: 'medium', label: 'متوسط' },
+      { key: 'large', label: 'بزرگ' },
+    ], currentFont, (key) => {
+      if (key === 'medium') document.documentElement.removeAttribute('data-fontsize');
+      else document.documentElement.dataset.fontsize = key;
+      prefs.fontSize = key === 'medium' ? undefined : key;
+      savePrefs(prefs);
+      toast('اندازه فونت ذخیره شد.', 'success', 1400);
+    }),
+  ]));
+
+  return card;
+}
+
+/** A touch-friendly segmented control. */
+function segmented(options, selectedKey, onChange) {
+  const root = el('div', { class: 'segmented', role: 'radiogroup' });
+  options.forEach((opt) => {
+    const btn = el('button', {
+      type: 'button',
+      class: `segmented__item${opt.key === selectedKey ? ' is-active' : ''}`,
+      role: 'radio',
+      'aria-checked': opt.key === selectedKey ? 'true' : 'false',
+      onclick: () => {
+        root.querySelectorAll('.segmented__item').forEach((b) => {
+          b.classList.remove('is-active');
+          b.setAttribute('aria-checked', 'false');
+        });
+        btn.classList.add('is-active');
+        btn.setAttribute('aria-checked', 'true');
+        onChange(opt.key);
+      },
+    }, opt.label);
+    root.append(btn);
+  });
+  return root;
+}
+
+/* ---------- About ---------- */
+
+function renderAboutCard() {
+  return el('section', { class: 'card' }, [
+    el('h3', { class: 'card__title' }, [icon('info'), 'درباره برنامه']),
+    el('p', { class: 'muted' }, 'My-Class-Track — دستیار پیگیری حضور، شهریه و تکالیف کلاس گروه‌درمانی هفتگی.'),
+    el('p', { class: 'muted mt-2' }, `نسخه: ${toPersianDigits(APP_VERSION)}`),
+  ]);
+}
+
+/* ---------- Utilities ---------- */
+
+function rerender() {
+  const main = document.getElementById('main-content');
+  if (!main) return;
+  const page = main.firstElementChild;
+  if (!page) return;
+  page.replaceChildren();
+  renderSettings(page);
+}
+
+export default { renderSettings };
