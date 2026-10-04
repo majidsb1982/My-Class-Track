@@ -1,14 +1,13 @@
 /* ============================================================
-   src/pages/settings.js — Settings page (phase 3)
-   Weekly class schedule + theme + font size.
-   Backup/restore UI arrives in phase 6.
+   src/pages/settings.js — Settings page (phases 3 & 6)
+   Weekly class schedule, reports, appearance, backup/restore.
    ============================================================ */
 
 import {
   el, icon, toast, confirmDialog, pageHead, formModal,
 } from '../ui.js';
-import { getSchedule, saveScheduleEntry, deleteScheduleEntry, getSessions } from '../store.js';
-import { WEEKDAY_NAMES, toPersianDigits, formatTime, formatJalali } from '../jalali.js';
+import { getSchedule, saveScheduleEntry, deleteScheduleEntry, getSessions, exportData, validateBackup, importData, clearAll } from '../store.js';
+import { WEEKDAY_NAMES, toPersianDigits, formatTime, formatJalali, todayJalali } from '../jalali.js';
 import { paymentsCsv, downloadCsv, openReport } from '../reports.js';
 
 const APP_VERSION = 'v1.0.0';
@@ -31,6 +30,7 @@ export function renderSettings(container) {
   container.append(renderScheduleCard());
   container.append(renderReportsCard());
   container.append(renderAppearanceCard());
+  container.append(renderDataCard());
   container.append(renderAboutCard());
 }
 
@@ -265,6 +265,108 @@ function segmented(options, selectedKey, onChange) {
     root.append(btn);
   });
   return root;
+}
+
+/* ---------- Backup / restore ---------- */
+
+function renderDataCard() {
+  const card = el('section', { class: 'card' }, []);
+  card.append(el('h3', { class: 'card__title' }, [icon('payment'), 'پشتیبان‌گیری و بازیابی']));
+  card.append(el('p', { class: 'muted' },
+    'داده‌ها فقط روی همین دستگاه ذخیره می‌شوند. پیش از پاک کردن حافظه مرورگر یا تعویض گوشی، حتماً یک فایل پشتیبان بگیرید.'));
+
+  const fileInput = el('input', {
+    type: 'file', accept: 'application/json,.json', class: 'visually-hidden',
+    'aria-label': 'انتخاب فایل پشتیبان',
+  });
+  fileInput.addEventListener('change', () => handleRestore(fileInput));
+
+  card.append(el('div', { class: 'btn-row mt-4' }, [
+    el('button', {
+      type: 'button', class: 'btn btn--primary grow',
+      onclick: exportBackup,
+    }, 'دریافت فایل پشتیبان'),
+    el('button', {
+      type: 'button', class: 'btn btn--secondary grow',
+      onclick: () => fileInput.click(),
+    }, 'بازیابی از فایل'),
+    el('button', {
+      type: 'button', class: 'btn btn--danger',
+      onclick: clearEverything,
+    }, 'پاک کردن همه داده‌ها'),
+  ]));
+  card.append(fileInput);
+  return card;
+}
+
+function exportBackup() {
+  const data = exportData();
+  const t = todayJalali();
+  const stamp = `${t.jy}-${String(t.jm).padStart(2, '0')}-${String(t.jd).padStart(2, '0')}`;
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = el('a', { href: url, download: `My-Class-Track-backup-${stamp}.json` });
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  toast('فایل پشتیبان ساخته شد.', 'success');
+}
+
+async function handleRestore(input) {
+  const file = input.files?.[0];
+  input.value = ''; // allow re-picking the same file
+  if (!file) return;
+
+  let payload;
+  try {
+    payload = JSON.parse(await file.text());
+  } catch {
+    toast('فایل انتخاب‌شده یک JSON معتبر نیست.', 'error');
+    return;
+  }
+
+  const check = validateBackup(payload);
+  if (!check.ok) {
+    toast(check.errors[0] || 'فایل پشتیبان معتبر نیست.', 'error');
+    return;
+  }
+  check.warnings.forEach((w) => toast(w, 'info', 3200));
+
+  const ok = await confirmDialog({
+    title: 'بازیابی پشتیبان',
+    text: 'داده‌های فعلی با محتوای فایل جایگزین می‌شوند. ادامه می‌دهید؟',
+    confirmText: 'بازیابی کن',
+    danger: true,
+  });
+  if (!ok) return;
+
+  const result = importData(payload);
+  toast(result.ok ? 'بازیابی انجام شد.' : 'بازیابی ناموفق بود.', result.ok ? 'success' : 'error');
+}
+
+async function clearEverything() {
+  // Two-step confirmation: the second step requires typing the word «پاک».
+  const first = await confirmDialog({
+    title: 'پاک کردن همه داده‌ها',
+    text: 'همه اعضا، جلسات، پرداخت‌ها و تکالیف حذف می‌شوند. این کار قابل بازگشت نیست.',
+    confirmText: 'ادامه',
+    cancelText: 'انصراف',
+    danger: true,
+  });
+  if (!first) return;
+
+  const second = await confirmDialog({
+    title: 'تأیید نهایی',
+    text: 'برای اطمینان، تأیید کنید که می‌خواهید همه داده‌ها برای همیشه پاک شود.',
+    confirmText: 'بله، پاک کن',
+    cancelText: 'انصراف',
+    danger: true,
+  });
+  if (!second) return;
+
+  clearAll();
+  toast('همه داده‌ها پاک شد.', 'success');
 }
 
 /* ---------- About ---------- */
