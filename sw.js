@@ -4,7 +4,7 @@
    for the page shell. Cleans old caches on activate.
    ============================================================ */
 
-const VERSION = 'v1.0.2';
+const VERSION = 'v1.0.3';
 const CACHE = `mct-cache-${VERSION}`;
 
 const PRECACHE = [
@@ -17,6 +17,7 @@ const PRECACHE = [
   './src/jalali.js',
   './src/store.js',
   './src/timer.js',
+  './src/reports.js',
   './src/pages/members.js',
   './src/pages/settings.js',
   './src/pages/attendance.js',
