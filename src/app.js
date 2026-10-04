@@ -203,6 +203,24 @@ function showQuickHelp() {
   });
 }
 
+/* ---------- Offline indicator ---------- */
+
+function initOfflineIndicator() {
+  const banner = el('div', {
+    class: 'offline-banner', id: 'offline-banner', role: 'status', hidden: true,
+  }, [
+    icon('info'),
+    el('span', {}, 'حالت آفلاین — اطلاعات شما روی همین دستگاه ذخیره شده است.'),
+  ]);
+  const header = document.querySelector('.app-header');
+  if (header) header.after(banner);
+
+  const update = () => { banner.hidden = navigator.onLine; };
+  window.addEventListener('online', () => { update(); toast('اتصال اینترنت برقرار شد.', 'success', 1800); });
+  window.addEventListener('offline', () => { update(); toast('حالت آفلاین فعال شد. برنامه همچنان کار می‌کند.', 'info', 2400); });
+  update();
+}
+
 /* ---------- Service worker ---------- */
 
 function registerServiceWorker() {
@@ -272,6 +290,7 @@ function init() {
   });
 
   reportSelfTest();
+  initOfflineIndicator();
   registerServiceWorker();
 }
 

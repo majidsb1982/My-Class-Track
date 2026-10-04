@@ -1111,6 +1111,23 @@ a:hover { text-decoration: underline; }
   border: 0;
 }
 
+/* ---------- Offline banner ---------- */
+.offline-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-align: center;
+  border-bottom: 1px solid var(--color-border);
+}
+.offline-banner .icon-slot { width: 18px; height: 18px; flex: none; }
+.offline-banner[hidden] { display: none; }
+
 /* ---------- Print ---------- */
 @media print {
   :root { --color-bg: #fff; --color-surface: #fff; --color-text: #000; }
@@ -1123,6 +1140,7 @@ a:hover { text-decoration: underline; }
   .icon-btn,
   .report-panel .btn,
   .dialog__actions,
+  .offline-banner,
   .door-screen,
   .timer-screen,
   .alarm-overlay { display: none !important; }
