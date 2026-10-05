@@ -7,3 +7,7 @@ Thumbs.db
 # local tooling
 node_modules/
 .qa/
+__pycache__/
+
+# build output (recreate with: python build-portable.py)
+dist/
