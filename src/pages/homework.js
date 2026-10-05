@@ -7,6 +7,7 @@ import {
   el, icon, toast, pageHead, emptyState, formModal, textAreaField,
   createJalaliDatePicker, confirmDialog,
 } from '../ui.js';
+import { copyText } from '../reports.js';
 import { getHomeworks, saveHomework, deleteHomework, getNextClass } from '../store.js';
 import {
   todayJalali, formatJalali, jalaliWeekdayName,
@@ -113,13 +114,7 @@ function whatsappText(hw) {
 }
 
 async function copyHomework(hw) {
-  const text = whatsappText(hw);
-  try {
-    await navigator.clipboard.writeText(text);
-    toast('متن تکلیف کپی شد.', 'success');
-  } catch {
-    toast('کپی ممکن نشد؛ متن را از کارت انتخاب کنید.', 'error');
-  }
+  await copyText(whatsappText(hw), 'متن تکلیف کپی شد.', 'متن را از کارت انتخاب کنید.');
 }
 
 async function removeHomework(hw) {

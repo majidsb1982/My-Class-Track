@@ -110,12 +110,26 @@ export function downloadCsv(filename, contents) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-async function copy(text) {
+/**
+ * Copy text to the clipboard, with an execCommand fallback for browsers that
+ * refuse the async clipboard API (non-secure contexts, older WebViews).
+ * Returns true when the text actually reached the clipboard.
+ */
+export async function copyText(text, okMessage, failMessage) {
   try {
     await navigator.clipboard.writeText(text);
-    toast('متن کپی شد. می‌توانید در واتساپ بفرستید.');
+    toast(okMessage || 'متن کپی شد.');
+    return true;
   } catch {
-    toast('کپی ممکن نشد؛ متن را از کادر گزارش انتخاب کنید.', 'error');
+    const ta = el('textarea', { class: 'visually-hidden', 'aria-hidden': 'true' });
+    ta.value = text;
+    document.body.append(ta);
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch { ok = false; }
+    ta.remove();
+    toast(ok ? (okMessage || 'متن کپی شد.') : (failMessage || 'کپی ممکن نشد؛ متن را انتخاب کنید.'), ok ? 'success' : 'error');
+    return ok;
   }
 }
 
@@ -140,7 +154,7 @@ export function reportPanel(sessionId, kind = 'attendance', slot = 1) {
     el('h3', { class: 'card__title' }, title), body,
   ]);
   const actions = el('div', { class: 'btn-row no-print' }, [
-    el('button', { type: 'button', class: 'btn btn--primary', onclick: () => copy(text) }, 'کپی متن'),
+    el('button', { type: 'button', class: 'btn btn--primary', onclick: () => copyText(text, 'متن کپی شد. می‌توانید در واتساپ بفرستید.', 'کپی ممکن نشد؛ متن را از کادر گزارش انتخاب کنید.') }, 'کپی متن'),
     el('button', {
       type: 'button', class: 'btn btn--secondary',
       onclick: async () => {
