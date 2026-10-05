@@ -7,7 +7,7 @@
 import { el, icon, pageHead, emptyState } from '../ui.js';
 import {
   getMembers, getNextClass, getUpcomingBirthdays, ensureSession,
-  getSession, attendanceProgress, getPayments,
+  attendanceProgress, getPayments,
 } from '../store.js';
 import {
   todayJalali, formatJalali, jalaliWeekdayName, toPersianDigits, toGregorian,
@@ -40,6 +40,8 @@ export function renderHome(container, options = {}) {
         onclick: () => navigate('settings'),
       }, 'تنظیمات'),
     ]));
+    // Birthdays, the summary and the shortcuts are still useful without a
+    // schedule, so they must not be skipped on this branch.
     container.append(renderBirthdays());
     container.append(renderSummary(null));
     container.append(renderShortcuts(navigate));

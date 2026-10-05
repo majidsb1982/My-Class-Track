@@ -301,7 +301,7 @@ function openDoorMode(container, date, options) {
 /* ---------- Timer ---------- */
 
 function openTimer(container, options) {
-  renderTimer(container, {
+  renderTimer({
     getStartTime: () => {
       const next = getNextClass();
       if (!next) return null;

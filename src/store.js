@@ -321,9 +321,8 @@ export function attendanceProgress(session, slot) {
 }
 
 /**
- * Members who are still "unknown" for a slot — the ones to call at the door.
- * A member is unknown when the previous slot has no decision, or was marked
- * absent/problem (still worth a follow-up call).
+ * Attendance records for one slot. Returns the members still awaiting a
+ * decision, each carrying their previous round for context.
  */
 export function getPendingMembers(session, slot) {
   load();
@@ -331,10 +330,10 @@ export function getPendingMembers(session, slot) {
   const current = session?.slots?.[String(slot)] || {};
   const previous = slot === 2 ? (session?.slots?.['1'] || {}) : {};
 
-  return clone(members.filter((m) => {
-    if (!current[m.id]) return true; // not yet recorded in this slot
-    return false;
-  }).map((m) => ({ ...m, previous: previous[m.id] || null })));
+  return clone(members.filter((m) => !current[m.id]).map((m) => ({
+    ...m,
+    previous: previous[m.id] || null,
+  })));
 }
 
 /** Validate member input. Returns an errors map (empty when valid). */
