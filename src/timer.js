@@ -11,17 +11,42 @@ import { toPersianDigits } from './jalali.js';
 /* ---------- Config ---------- */
 
 const TARGET_KEY = 'mct:timer-target';
+const FIRED_KEY = 'mct:timer-fired';
 /** Minutes-before-start at which to fire an alarm (descending). */
 export const ALARM_MINUTES = [15, 8, 5, 3];
 const TICK_MS = 250;
 
-/* ---------- Persistence (target time only) ---------- */
+/* ---------- Persistence (target time + which alarms already fired) ---------- */
 
 function saveTarget(iso) {
   try {
     if (iso) localStorage.setItem(TARGET_KEY, iso);
     else localStorage.removeItem(TARGET_KEY);
   } catch { /* storage unavailable — timer still works for this session */ }
+}
+
+/**
+ * Which thresholds have already sounded for the current target. Persisted so a
+ * reload (or a reopened page) does not replay an alarm the user already heard.
+ */
+function loadFired() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(FIRED_KEY));
+    return raw && raw.target === loadTargetKey() && Array.isArray(raw.fired) ? new Set(raw.fired) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+function loadTargetKey() {
+  try { return localStorage.getItem(TARGET_KEY) || ''; } catch { return ''; }
+}
+
+function saveFired(set) {
+  try {
+    if (!set.size) localStorage.removeItem(FIRED_KEY);
+    else localStorage.setItem(FIRED_KEY, JSON.stringify({ target: loadTargetKey(), fired: [...set] }));
+  } catch { /* ignore */ }
 }
 
 export function loadTarget() {
@@ -145,17 +170,19 @@ export function alarmPhrase(minutes) {
 /* ---------- Timer screen ---------- */
 
 /**
- * Render the full-screen door timer into a container.
- * @param {HTMLElement} container
+ * Render the full-screen door timer.
+ * The screen mounts on <body> so it is never torn down by page re-renders.
  * @param {Object} options { getStartTime: () => Date|null, onBack: () => void }
  */
-export function renderTimer(container, options = {}) {
+export function renderTimer(options = {}) {
   const { getStartTime = () => null, onBack = () => { } } = options;
 
   let tickId = null;
-  let firedAlarms = new Set();
+  let firedAlarms = loadFired();
   let target = loadTarget();
   let running = false;
+  // Minutes remaining at the previous tick, used to detect a threshold crossing.
+  let lastMinutesLeft = Infinity;
 
   /* --- DOM --- */
   const timeEl = el('div', { class: 'timer__time', role: 'timer', 'aria-live': 'off' }, '۰۰:۰۰:۰۰');
@@ -207,12 +234,17 @@ export function renderTimer(container, options = {}) {
   /* --- Alarm overlay --- */
 
   function showAlarm(minutes) {
+    // Only one reminder is on screen at a time: a new one replaces the old,
+    // otherwise stacked overlays hide the message that is actually current.
+    document.querySelector('.alarm-overlay')?.remove();
     const overlay = el('div', {
       class: 'alarm-overlay', role: 'alertdialog', 'aria-modal': 'true',
     }, [
       el('div', { class: 'alarm-overlay__content' }, [
         el('div', { class: 'alarm-overlay__icon' }, icon('clock')),
-        el('p', { class: 'alarm-overlay__message' }, alarmPhrase(minutes)),
+        el('p', { class: 'alarm-overlay__message' }, minutes === 0
+          ? 'کلاس شروع شد'
+          : alarmPhrase(minutes)),
         el('button', {
           type: 'button', class: 'btn btn--primary btn--lg',
           onclick: () => overlay.remove(),
@@ -247,6 +279,7 @@ export function renderTimer(container, options = {}) {
       statusEl.textContent = 'کلاس شروع شد';
       if (!firedAlarms.has(0)) {
         firedAlarms.add(0);
+        saveFired(firedAlarms);
         playChime(3);
         vibrate();
         notify('My-Class-Track', 'کلاس شروع شد');
@@ -257,16 +290,48 @@ export function renderTimer(container, options = {}) {
     }
 
     const minutesLeft = remaining / 60000;
-    for (const m of ALARM_MINUTES) {
-      if (minutesLeft <= m && !firedAlarms.has(m)) {
-        firedAlarms.add(m);
-        fireAlarm(m);
+
+    // The first tick has no previous value to compare against, so it must not
+    // use the crossing test — every threshold below the current time would look
+    // "just crossed". It is handled separately below.
+    const firstTick = lastMinutesLeft === Infinity;
+
+    // Thresholds crossed since the previous tick. Comparing against
+    // lastMinutesLeft (instead of "minutesLeft <= m") is what makes each alarm
+    // match its own moment: at 8 minutes the 15-minute reminder is long past,
+    // so only the 8-minute one sounds.
+    const crossed = firstTick
+      ? []
+      : ALARM_MINUTES
+        .filter((m) => minutesLeft <= m && lastMinutesLeft > m && !firedAlarms.has(m))
+        .sort((a, b) => b - a); // descending: the largest threshold crossed first
+
+    let alarm = crossed[0] ?? null;
+    crossed.forEach((m) => firedAlarms.add(m));
+
+    // The page may have been opened when the countdown already sits below one
+    // or more thresholds. Announce the single one closest to the moment —
+    // ALARM_MINUTES is descending, so that is the LAST match.
+    if (alarm === null && firstTick) {
+      const below = ALARM_MINUTES.filter((m) => minutesLeft <= m && !firedAlarms.has(m));
+      if (below.length) {
+        alarm = below[below.length - 1];
+        below.forEach((m) => firedAlarms.add(m));
       }
     }
+
+    if (alarm !== null) {
+      saveFired(firedAlarms);
+      fireAlarm(alarm);
+    }
+    lastMinutesLeft = minutesLeft;
   }
 
   function startTicking() {
     stopTicking();
+    // Infinity on purpose: the first tick decides whether the countdown has
+    // already dropped below a threshold and needs a catch-up reminder.
+    lastMinutesLeft = Infinity;
     tickId = setInterval(tick, TICK_MS);
     tick();
   }
@@ -300,6 +365,8 @@ export function renderTimer(container, options = {}) {
     }
     saveTarget(target.toISOString());
     firedAlarms = new Set();
+    saveFired(firedAlarms);
+    lastMinutesLeft = Infinity;
     running = true;
     timeEl.classList.remove('timer__time--done');
     statusEl.textContent = 'در حال شمارش';
@@ -314,6 +381,8 @@ export function renderTimer(container, options = {}) {
     saveTarget(null);
     target = null;
     firedAlarms = new Set();
+    saveFired(firedAlarms);
+    lastMinutesLeft = Infinity;
     timeEl.textContent = formatCountdown(0);
     timeEl.classList.remove('timer__time--done');
     statusEl.textContent = 'آماده';
