@@ -6,11 +6,12 @@
 import {
   el, icon, toast, confirmDialog, emptyState, pageHead,
   textField, textAreaField, checkboxChips, formModal,
-  createJalaliDatePicker,
+  createJalaliDatePicker, debounce,
 } from '../ui.js';
 import {
   ROLES, ROLE_KEYS, getMembers, saveMember, archiveMember,
-  getPeriods, startNewPeriod,
+  getPeriods, startNewPeriod, findPhoneOwner,
+  getMemberHistory, getMemberStats, ATTENDANCE_STATUS,
 } from '../store.js';
 import { membersCsv, downloadCsv } from '../reports.js';
 import { formatJalali, jalaliWeekdayName, todayJalali, toPersianDigits } from '../jalali.js';
@@ -44,9 +45,10 @@ export function renderMembers(container) {
     class: 'input', type: 'search', placeholder: 'جستجوی نام یا شماره…',
     value: searchTerm, 'aria-label': 'جستجوی اعضا',
   });
+  const rerenderList = debounce(() => renderList(listWrap), 160);
   searchInput.addEventListener('input', () => {
     searchTerm = searchInput.value.trim();
-    renderList(listWrap);
+    rerenderList();
   });
   container.append(el('div', { class: 'field' }, [searchInput]));
 
@@ -131,6 +133,12 @@ function renderMemberItem(m, archived = false) {
         : null,
     !archived
       ? el('button', {
+        type: 'button', class: 'icon-btn', 'aria-label': `سابقه ${m.name}`,
+        onclick: () => showMemberHistory(m),
+      }, icon('attendance'))
+      : null,
+    !archived
+      ? el('button', {
         type: 'button', class: 'icon-btn', 'aria-label': `ویرایش ${m.name}`,
         onclick: () => openMemberForm(m),
       }, icon('settings'))
@@ -170,6 +178,13 @@ function openMemberForm(member) {
   const phoneField = textField({
     label: 'شماره تماس', type: 'tel', inputMode: 'tel',
     placeholder: '۰۹۱۲۳۴۵۶۷۸۹', value: member?.phone || '',
+  });
+  // Warn (without blocking) when the same number is already on another member.
+  phoneField.input.addEventListener('blur', () => {
+    const value = phoneField.getValue();
+    if (!value) return;
+    const owner = findPhoneOwner(value, member?.id);
+    if (owner) phoneField.setError(`این شماره قبلاً برای «${owner}» ثبت شده است.`);
   });
   const noteField = textAreaField({
     label: 'یادداشت', placeholder: 'نکته‌ای درباره این عضو…',
@@ -280,6 +295,79 @@ function archiveCurrentRolesAndApply(roleInputs) {
   startNewPeriod(assignments);
 }
 
+/* ---------- Member history ---------- */
+
+/**
+ * Show one member's attendance record: aggregate stats plus every session
+ * they have a decision for, newest first. Read-only.
+ */
+function showMemberHistory(member) {
+  const stats = getMemberStats(member.id);
+  const history = getMemberHistory(member.id);
+
+  const body = el('div', {});
+
+  // Stat tiles
+  body.append(el('div', { class: 'stat-grid' }, [
+    statTile('حضور', stats.present, 'success'),
+    statTile('تأخیر', stats.late, 'warning'),
+    statTile('غیبت', stats.absent, 'danger'),
+    statTile('مشکل', stats.problem, 'problem'),
+  ]));
+
+  if (!stats.total) {
+    body.append(el('p', { class: 'muted mt-4' }, 'برای این عضو هنوز حضوری ثبت نشده است.'));
+  } else {
+    body.append(el('div', { class: 'rate-line mt-4' }, [
+      el('span', { class: 'rate-line__value' }, `${toPersianDigits(stats.rate)}٪`),
+      el('span', { class: 'rate-line__label' },
+        `حضور در ${toPersianDigits(stats.total)} جلسه ثبت‌شده`),
+    ]));
+
+    const list = el('ul', { class: 'list mt-3' });
+    history.forEach((h) => {
+      const st = h.status ? ATTENDANCE_STATUS[h.status] : null;
+      const details = [];
+      if (h.slot1?.status) details.push(`نوبت ۱: ${ATTENDANCE_STATUS[h.slot1.status].label}`);
+      if (h.slot2?.status) details.push(`نوبت ۲: ${ATTENDANCE_STATUS[h.slot2.status].label}`);
+      const late = (h.slot2 || h.slot1)?.lateTime;
+      if (late) details.push(`حدود ${toPersianDigits(late)}`);
+      const note = (h.slot2 || h.slot1)?.note;
+      if (note) details.push(note);
+
+      list.append(el('li', { class: 'list-item' }, [
+        el('div', { class: 'list-item__body' }, [
+          el('div', { class: 'list-item__title' },
+            `${jalaliWeekdayName(h.session.jy, h.session.jm, h.session.jd)} ${formatJalali(h.session.jy, h.session.jm, h.session.jd)}`),
+          el('div', { class: 'list-item__meta' }, details.join(' • ')),
+        ]),
+        st
+          ? el('span', { class: `badge badge--${st.tone}` }, `${st.icon} ${st.label}`)
+          : el('span', { class: 'badge' }, 'ثبت‌نشده'),
+      ]));
+    });
+    body.append(list);
+  }
+
+  formModal({
+    title: `سابقه حضور — ${member.name}`,
+    body,
+    submitLabel: 'بستن',
+    cancelLabel: 'بستن',
+    onSubmit: () => null,
+  });
+}
+
+/** A small labelled count tile used in the member history dialog. */
+function statTile(label, value, tone) {
+  return el('div', { class: `stat stat--${tone}` }, [
+    el('div', {}, [
+      el('div', { class: 'stat__value' }, toPersianDigits(value)),
+      el('div', { class: 'stat__label' }, label),
+    ]),
+  ]);
+}
+
 /* ---------- Periods archive section ---------- */
 
 function renderPeriodsSection() {
@@ -352,6 +440,7 @@ function rerender() {
   if (!main) return;
   const page = main.firstElementChild;
   if (!page) return;
+  page.dispatchEvent(new CustomEvent('mct:destroy', { bubbles: true }));
   page.replaceChildren();
   renderMembers(page);
 }

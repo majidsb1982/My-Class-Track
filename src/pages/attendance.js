@@ -11,7 +11,7 @@ import {
   ATTENDANCE_STATUS, STATUS_KEYS,
   getMembers, getSessions, ensureSession, getSession,
   setAttendance, attendanceProgress,
-  getNextClass,
+  getNextClass, getAttendanceTrend,
 } from '../store.js';
 import { todayJalali, formatJalali, jalaliWeekdayName, toPersianDigits, toGregorian } from '../jalali.js';
 import { renderDoorMode } from './door.js';
@@ -107,6 +107,70 @@ export function renderAttendance(container, options = {}) {
   }, 'گزارش نوبت ۱'));
   round1.append(renderRoundList(fresh, 1, members, container, date, options));
   container.append(round1);
+
+  // History of past sessions (only once something has been recorded).
+  const trend = renderTrendSection();
+  if (trend) container.append(trend);
+}
+
+/* ---------- Trend / history ---------- */
+
+/**
+ * A compact bar chart of attendance per session, oldest first.
+ * Returns null when there is nothing worth showing yet.
+ */
+function renderTrendSection() {
+  const trend = getAttendanceTrend().filter((t) => t.total > 0);
+  if (trend.length < 2) return null;
+
+  const section = el('section', { class: 'section mt-6' });
+  section.append(el('h3', { class: 'section__title' }, [icon('clock'), 'روند حضور جلسات']));
+
+  // Only the most recent sessions, so the chart stays readable on a phone.
+  const recent = trend.slice(-8);
+  const max = Math.max(...recent.map((t) => t.total), 1);
+
+  const chart = el('div', { class: 'trend', role: 'img',
+    'aria-label': 'نمودار حضور در جلسات اخیر' });
+
+  recent.forEach((t) => {
+    const attended = t.present + t.late;
+    const pct = (attended / max) * 100;
+    const bar = el('div', { class: 'trend__bar', style: { height: `${pct}%` } }, [
+      el('span', { class: 'trend__count' }, toPersianDigits(attended)),
+    ]);
+    chart.append(el('div', { class: 'trend__col' }, [
+      bar,
+      el('span', { class: 'trend__label' }, toPersianDigits(t.jd)),
+    ]));
+  });
+  section.append(chart);
+
+  // Totals across every recorded session.
+  const totals = trend.reduce((acc, t) => ({
+    present: acc.present + t.present,
+    late: acc.late + t.late,
+    absent: acc.absent + t.absent,
+    problem: acc.problem + t.problem,
+  }), { present: 0, late: 0, absent: 0, problem: 0 });
+
+  section.append(el('div', { class: 'stat-grid mt-4' }, [
+    trendStat('حاضر', totals.present, 'success'),
+    trendStat('تأخیر', totals.late, 'warning'),
+    trendStat('غایب', totals.absent, 'danger'),
+    trendStat('مشکل', totals.problem, 'problem'),
+  ]));
+
+  return section;
+}
+
+function trendStat(label, value, tone) {
+  return el('div', { class: `stat stat--${tone}` }, [
+    el('div', {}, [
+      el('div', { class: 'stat__value' }, toPersianDigits(value)),
+      el('div', { class: 'stat__label' }, label),
+    ]),
+  ]);
 }
 
 /* ---------- Progress ---------- */
@@ -326,6 +390,7 @@ function rerender(container, date, options) {
   if (!main) return;
   const page = main.firstElementChild;
   const target = page || container;
+  target.dispatchEvent(new CustomEvent('mct:destroy', { bubbles: true }));
   target.replaceChildren();
   renderAttendance(target, { ...options, date });
 }

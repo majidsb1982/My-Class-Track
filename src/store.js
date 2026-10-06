@@ -389,7 +389,6 @@ export function validateMember(input) {
       errors.phone = 'شماره تماس معتبر نیست (مثال: ۰۹۱۲۳۴۵۶۷۸۹).';
     }
   }
-
   if (input?.birth) {
     const { jy, jm, jd } = input.birth;
     if (!Number.isInteger(jy) || !Number.isInteger(jm) || !Number.isInteger(jd)) {
@@ -428,6 +427,20 @@ function toLatinDigitsLocal(v) {
 function normalizePhone(phone) {
   const digits = toLatinDigitsLocal(String(phone || '')).replace(/[\s()-]/g, '');
   return digits;
+}
+
+/**
+ * Is this phone number already used by a different member?
+ * Duplicate numbers are almost always a typo, and they make the call list
+ * ambiguous, so the member form warns about them.
+ * @returns {string|null} the clashing member's name, or null.
+ */
+export function findPhoneOwner(phone, exceptId = null) {
+  load();
+  const digits = normalizePhone(phone);
+  if (!digits) return null;
+  const clash = data.members.find((m) => m.id !== exceptId && normalizePhone(m.phone) === digits);
+  return clash ? clash.name : null;
 }
 
 /* ---------- Class schedule ---------- */
@@ -524,6 +537,73 @@ export function getUpcomingBirthdays(days = 7, from = new Date()) {
     }
   }
   return out.sort((a, b) => a.daysLeft - b.daysLeft);
+}
+
+/* ---------- History & analytics ---------- */
+
+/**
+ * Attendance history for one member, newest first.
+ * @returns {Array<{session:Object, slot1:Object|null, slot2:Object|null, status:string|null}>}
+ */
+export function getMemberHistory(memberId) {
+  load();
+  const out = [];
+  for (const s of data.sessions) {
+    const slot1 = s.slots?.['1']?.[memberId] || null;
+    const slot2 = s.slots?.['2']?.[memberId] || null;
+    // Prefer the round-2 decision (closest to reality), fall back to round 1.
+    const record = slot2 || slot1;
+    if (!record && !slot1 && !slot2) continue;
+    out.push({
+      session: { id: s.id, jy: s.jy, jm: s.jm, jd: s.jd },
+      slot1,
+      slot2,
+      status: record?.status || null,
+    });
+  }
+  return clone(out.sort((a, b) => (b.session.jy - a.session.jy)
+    || (b.session.jm - a.session.jm) || (b.session.jd - a.session.jd)));
+}
+
+/**
+ * Aggregate attendance stats for one member across all recorded sessions.
+ * @returns {{total:number, present:number, late:number, absent:number, problem:number, rate:number}}
+ */
+export function getMemberStats(memberId) {
+  const history = getMemberHistory(memberId);
+  const counts = { present: 0, late: 0, absent: 0, problem: 0 };
+  history.forEach((h) => { if (h.status in counts) counts[h.status] += 1; });
+  const total = history.length;
+  // «حاضر» and «تأخیر» both mean the person attended, so both count towards the rate.
+  const attended = counts.present + counts.late;
+  return {
+    total,
+    ...counts,
+    rate: total ? Math.round((attended / total) * 100) : 0,
+  };
+}
+
+/**
+ * Per-session attendance totals for the trend view.
+ * @returns {Array<{jy,jm,jd,label,total,present,late,absent,problem,unrecorded}>}
+ */
+export function getAttendanceTrend() {
+  load();
+  const active = data.members.filter((m) => m.active !== false);
+  return clone(data.sessions.map((s) => {
+    const entries = s.slots?.['2'] && Object.keys(s.slots['2']).length
+      ? s.slots['2']
+      : (s.slots?.['1'] || {});
+    const counts = { present: 0, late: 0, absent: 0, problem: 0 };
+    Object.values(entries).forEach((r) => { if (r?.status in counts) counts[r.status] += 1; });
+    const recorded = Object.keys(entries).length;
+    return {
+      jy: s.jy, jm: s.jm, jd: s.jd,
+      total: active.length,
+      ...counts,
+      unrecorded: Math.max(0, active.length - recorded),
+    };
+  }).sort((a, b) => (a.jy - b.jy) || (a.jm - b.jm) || (a.jd - b.jd)));
 }
 
 /* ---------- Payments (per session) ---------- */
@@ -697,6 +777,7 @@ export default {
   archiveMember,
   deleteMember,
   validateMember,
+  findPhoneOwner,
   getSchedule,
   saveScheduleEntry,
   deleteScheduleEntry,
@@ -709,6 +790,9 @@ export default {
   deleteHomework,
   getNextClass,
   getUpcomingBirthdays,
+  getMemberHistory,
+  getMemberStats,
+  getAttendanceTrend,
   exportData,
   validateBackup,
   importData,

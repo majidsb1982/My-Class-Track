@@ -19,8 +19,11 @@ for (const f of [
   'src/pages/home.js', 'src/pages/attendance.js', 'src/pages/door.js',
   'src/pages/payment.js', 'src/pages/homework.js', 'src/pages/members.js',
   'src/pages/settings.js',
+  'src/prefs.js',
+  'LICENSE', 'CONTRIBUTING.md', 'SECURITY.md',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png',
   '.github/workflows/pages.yml',
+  '.github/workflows/ci.yml',
 ]) {
   const p = join(ROOT, f);
   if (!existsSync(p)) bad(`missing ${f}`);
@@ -118,6 +121,40 @@ try {
     const back = s.getMember(a.id);
     if (!back || back.roles.join() !== 'supporter') throw new Error('restore lost roles');
     if (s.getPeriods().length !== 1) throw new Error('restore lost periods');
+
+    // Analytics: build two sessions and check the derived stats.
+    const m3 = s.saveMember({ name: 'سارا', roles: [], birth: null });
+    const d1 = s.ensureSession(1404, 1, 5);
+    const d2 = s.ensureSession(1404, 1, 12);
+    s.setAttendance(d1.id, 2, a.id, { status: 'present' });
+    s.setAttendance(d1.id, 2, m3.id, { status: 'absent' });
+    s.setAttendance(d2.id, 2, a.id, { status: 'late', lateTime: '19:30' });
+    s.setAttendance(d2.id, 2, m3.id, { status: 'present' });
+
+    const statsA = s.getMemberStats(a.id);
+    if (statsA.total !== 2) throw new Error('history total wrong: ' + statsA.total);
+    if (statsA.present !== 1 || statsA.late !== 1) throw new Error('status counts wrong');
+    if (statsA.rate !== 100) throw new Error('present+late must count as attended: ' + statsA.rate);
+
+    const statsM3 = s.getMemberStats(m3.id);
+    if (statsM3.rate !== 50) throw new Error('absent must lower the rate: ' + statsM3.rate);
+
+    const hist = s.getMemberHistory(a.id);
+    if (hist.length !== 2) throw new Error('history length wrong: ' + hist.length);
+    // Newest first.
+    if (!(hist[0].session.jd === 12 && hist[1].session.jd === 5)) throw new Error('history not newest-first');
+    if (hist[0].slot2.lateTime !== '19:30') throw new Error('late time lost in history');
+
+    const trend = s.getAttendanceTrend();
+    if (trend.length !== 2) throw new Error('trend length wrong: ' + trend.length);
+    // Oldest first, and the totals must add up across both sessions.
+    if (trend[0].jd !== 5) throw new Error('trend not oldest-first');
+    if (trend[0].present !== 1 || trend[0].absent !== 1) throw new Error('trend d1 counts wrong');
+    if (trend[1].late !== 1 || trend[1].present !== 1) throw new Error('trend d2 counts wrong');
+    if (trend[0].total !== 3) throw new Error('trend total should count active members: ' + trend[0].total);
+    // «ب» has no decision in either session, so it is unrecorded in both.
+    if (trend[0].unrecorded !== 1) throw new Error('unrecorded count wrong: ' + trend[0].unrecorded);
+
     console.log('ok');
   `;
   const out = execFileSync(process.execPath, ['--input-type=module', '-e', script], {
