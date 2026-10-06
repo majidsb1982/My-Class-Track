@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: گزارش آسیب‌پذیری امنیتی
+    url: https://github.com/majidsb1982/My-Class-Track/security/advisories/new
+    about: لطفاً آسیب‌پذیری‌ها را به‌صورت خصوصی گزارش کنید، نه در Issue عمومی.
+  - name: راهنمای مشارکت
+    url: https://github.com/majidsb1982/My-Class-Track/blob/main/CONTRIBUTING.md
+    about: قوانین پروژه، راه‌اندازی محیط و دستورهای بررسی.

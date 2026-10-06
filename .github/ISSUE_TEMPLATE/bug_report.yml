@@ -1,0 +1,73 @@
+name: گزارش باگ
+description: چیزی درست کار نمی‌کند
+title: "[باگ] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        سپاس از وقتی که برای گزارش می‌گذارید.
+        اگر باگ مربوط به **امنیت** است، لطفاً آن را عمومی گزارش نکنید؛
+        از تب Security → Report a vulnerability استفاده کنید.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: چه اتفاقی افتاد؟
+      description: رفتار واقعی را توضیح دهید.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: انتظار داشتید چه بشود؟
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: گام‌های بازتولید
+      placeholder: |
+        ۱. به صفحه اعضا بروید
+        ۲. یک عضو با شماره تکراری اضافه کنید
+        ۳. ...
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: نسخه برنامه
+      description: در تنظیمات → «درباره برنامه» نوشته شده است.
+      placeholder: "v1.2.0"
+    validations:
+      required: true
+
+  - type: input
+    id: browser
+    attributes:
+      label: مرورگر و نسخه
+      placeholder: "Chrome 132 روی اندروید ۱۴"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: installed
+    attributes:
+      label: برنامه نصب‌شده است؟
+      options:
+        - بله، از Add to Home Screen نصب شده
+        - خیر، در تب مرورگر باز است
+    validations:
+      required: false
+
+  - type: textarea
+    id: console
+    attributes:
+      label: خطاهای کنسول
+      description: در صورت امکان، خروجی Console مرورگر را بچسبانید.
+      render: shell
+    validations:
+      required: false

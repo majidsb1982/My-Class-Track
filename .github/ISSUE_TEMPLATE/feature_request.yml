@@ -1,0 +1,50 @@
+name: پیشنهاد قابلیت
+description: ایده‌ای برای بهتر شدن برنامه
+title: "[پیشنهاد] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        برنامه برای «مسئولان پیگیری یک کلاس گروه‌درمانی هفتگی» ساخته شده است.
+        پیشنهادهایی که این سناریو را ساده‌تر کنند در اولویت هستند.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: چه مشکلی را حل می‌کند؟
+      description: به‌جای راه‌حل، موقعیتی را توضیح دهید که آزاردهنده است.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: راه‌حل پیشنهادی
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: مربوط به کدام بخش است؟
+      options:
+        - حضور (دو نوبت)
+        - حالت پشت در
+        - تایمر و آلارم
+        - شهریه
+        - تکالیف
+        - اعضا و دوره‌ها
+        - گزارش‌ها و خروجی
+        - خانه
+        - تنظیمات
+        - ظاهر و دسترس‌پذیری
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: راه‌های دیگری که در نظر گرفتید
+    validations:
+      required: false
