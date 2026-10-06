@@ -4,7 +4,7 @@
    for the page shell. Cleans old caches on activate.
    ============================================================ */
 
-const VERSION = 'v1.0.5';
+const VERSION = 'v1.1.0';
 const CACHE = `mct-cache-${VERSION}`;
 
 const PRECACHE = [
@@ -17,6 +17,7 @@ const PRECACHE = [
   './src/ui.js',
   './src/jalali.js',
   './src/store.js',
+  './src/prefs.js',
   './src/timer.js',
   './src/reports.js',
   './src/pages/members.js',
@@ -37,7 +38,11 @@ const PRECACHE = [
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(PRECACHE)).then(() => self.skipWaiting()),
+    caches.open(CACHE).then(async (cache) => {
+      // Add entries individually: one missing/renamed file must not abort the
+      // whole install, otherwise the app loses offline support entirely.
+      await Promise.all(PRECACHE.map((url) => cache.add(url).catch(() => null)));
+    }).then(() => self.skipWaiting()),
   );
 });
 
@@ -48,6 +53,16 @@ self.addEventListener('activate', (event) => {
       .then(() => self.clients.claim()),
   );
 });
+
+const OFFLINE_URL = './offline.html';
+
+/** Only cache complete, same-origin responses — never opaque or error replies. */
+function cacheIfUsable(cache, request, response) {
+  if (response && response.status === 200 && response.type !== 'opaque') {
+    cache.put(request, response.clone());
+  }
+  return response;
+}
 
 self.addEventListener('fetch', (event) => {
   const { request } = event;
@@ -62,24 +77,21 @@ self.addEventListener('fetch', (event) => {
     // network-first for the page shell, fall back to cache when offline
     event.respondWith(
       fetch(request)
-        .then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE).then((cache) => cache.put(request, copy));
-          return response;
-        })
-        .catch(() => caches.match(request).then((cached) => cached || caches.match('./index.html'))),
+        .then((response) => caches.open(CACHE).then((cache) => cacheIfUsable(cache, request, response)))
+        .catch(async () => {
+          const cached = await caches.match(request);
+          if (cached) return cached;
+          const shell = await caches.match('./index.html');
+          if (shell) return shell;
+          return caches.match(OFFLINE_URL);
+        }),
     );
     return;
   }
 
   // cache-first for static assets
   event.respondWith(
-    caches.match(request).then((cached) => cached || fetch(request).then((response) => {
-      if (response.ok) {
-        const copy = response.clone();
-        caches.open(CACHE).then((cache) => cache.put(request, copy));
-      }
-      return response;
-    })),
+    caches.match(request).then((cached) => cached || fetch(request).then((response) =>
+      caches.open(CACHE).then((cache) => cacheIfUsable(cache, request, response)))),
   );
 });

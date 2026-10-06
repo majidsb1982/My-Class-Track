@@ -10,7 +10,7 @@ import {
 } from '../ui.js';
 import {
   ROLES, ROLE_KEYS, getMembers, saveMember, archiveMember,
-  getPeriods, getData, importData,
+  getPeriods, startNewPeriod,
 } from '../store.js';
 import { membersCsv, downloadCsv } from '../reports.js';
 import { formatJalali, jalaliWeekdayName, todayJalali, toPersianDigits } from '../jalali.js';
@@ -123,12 +123,12 @@ function renderMemberItem(m, archived = false) {
   ]);
 
   const actions = el('div', { class: 'list-item__actions' }, [
-    m.phone
-      ? el('a', {
-        class: 'icon-btn', href: `tel:${m.phone}`,
-        'aria-label': `تماس با ${m.name}`, rel: 'noopener',
-      }, icon('phone'))
-      : null,
+      m.phone
+        ? el('a', {
+          class: 'icon-btn', href: `tel:${m.phone}`,
+          'aria-label': `تماس با ${m.name}`,
+        }, icon('phone'))
+        : null,
     !archived
       ? el('button', {
         type: 'button', class: 'icon-btn', 'aria-label': `ویرایش ${m.name}`,
@@ -185,6 +185,8 @@ function openMemberForm(member) {
     value: member?.birth || null,
     placeholder: 'انتخاب تاریخ تولد (شمسی)',
   });
+  const birthError = el('span', { class: 'field__error', role: 'alert' });
+  birthError.hidden = true;
 
   const body = el('div', {}, [
     nameField.root,
@@ -192,6 +194,7 @@ function openMemberForm(member) {
     el('div', { class: 'field' }, [
       el('span', { class: 'field__label' }, 'تاریخ تولد'),
       birthPicker.root,
+      birthError,
     ]),
     el('div', { class: 'field' }, [
       el('span', { class: 'field__label' }, 'نقش‌ها'),
@@ -217,6 +220,8 @@ function openMemberForm(member) {
       if (!result.ok) {
         nameField.setError(result.errors.name);
         phoneField.setError(result.errors.phone);
+        birthError.textContent = result.errors.birth || '';
+        birthError.hidden = !result.errors.birth;
         return result.errors;
       }
       toast(isEdit ? 'تغییرات ذخیره شد.' : 'عضو افزوده شد.', 'success');
@@ -270,39 +275,9 @@ function openNewPeriod() {
 }
 
 function archiveCurrentRolesAndApply(roleInputs) {
-  const data = getData();
-  const today = todayJalali();
-
-  // Archive the current role snapshot.
-  const snapshot = data.members
-    .filter((m) => m.active !== false)
-    .map((m) => ({ id: m.id, name: m.name, roles: m.roles }));
-
-  const periods = data.periods || [];
-  periods.push({
-    id: `p_${Date.now().toString(36)}`,
-    startedAt: today,
-    endedAt: null,
-    members: snapshot,
-  });
-
-  // Close the previous open period.
-  for (let i = periods.length - 2; i >= 0; i -= 1) {
-    if (!periods[i].endedAt) { periods[i].endedAt = today; break; }
-  }
-
-  // Apply the new roles.
-  roleInputs.forEach((chips, memberId) => {
-    const m = data.members.find((x) => x.id === memberId);
-    if (!m) return;
-    const updated = { ...m, roles: chips.getValue() };
-    saveMember(updated);
-  });
-
-  // Persist periods through the store's import path to keep one writer.
-  const fresh = getData();
-  fresh.periods = periods;
-  importData(fresh);
+  const assignments = new Map();
+  roleInputs.forEach((chips, memberId) => assignments.set(memberId, chips.getValue()));
+  startNewPeriod(assignments);
 }
 
 /* ---------- Periods archive section ---------- */

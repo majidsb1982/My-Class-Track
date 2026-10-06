@@ -5,6 +5,26 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+A full audit pass over data integrity, preference handling, offline behaviour and reporting.
+
+### Fixed
+
+- **New-period flow could corrupt member data.** Starting a new period wrote the role snapshot, then re-imported the whole dataset, which re-ran migration and rebuilt every member record. Replaced with a single atomic `store.startNewPeriod()` call that closes the previous period, archives the snapshot and applies the new roles in one write.
+- **Birthdays on the 30th/31st were silently moved.** `safeBirthday()` clamped every day to 29, so a 31 Farvardin birthday showed as the 29th. It now clamps only when the day genuinely does not exist in that month.
+- **Impossible birth dates were accepted.** `saveMember` stored whatever the picker produced; an invalid day now returns a clear Persian error, and the members form displays it.
+- **Theme changes made in Settings left the header button out of sync.** Both surfaces now go through a new shared `src/prefs.js` module, and the header reacts to a `mct:theme-change` event.
+- **One missing precache file broke the whole service-worker install.** `cache.addAll` is replaced with per-URL adds that tolerate individual failures, and opaque/error responses are no longer cached.
+- **CSV filenames were inconsistent.** The settings report picker now uses the same `My-Class-Track-<date>-<kind>.csv` pattern as everywhere else.
+
+### Added
+
+- `src/prefs.js` — the single reader/writer for the `mct:prefs` key (theme, font size, debug flag)
+- `store.startNewPeriod()` — atomic period rollover
+- Regression coverage in `tools/check-project.mjs` (section 5b): member round-trip, Persian phone normalisation, birthday validation, atomic period change and a full backup → wipe → restore cycle, all run against an in-memory storage shim
+- The header theme button now exposes a correct `aria-pressed` state and an updated label
+
 ## [1.0.0] — 2026-10-04
 
 First complete release: all eight phases of `AGENTS.md` implemented, tested and documented.

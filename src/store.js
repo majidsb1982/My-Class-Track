@@ -3,7 +3,9 @@
    Schema versioning + safe migration + CRUD + change events.
    ============================================================ */
 
-import { todayJalali, toJalali, addJalaliDays, jalaliDiffDays } from './jalali.js';
+import {
+  todayJalali, toJalali, addJalaliDays, jalaliDiffDays, jalaliMonthLength,
+} from './jalali.js';
 
 /* ---------- Config ---------- */
 
@@ -173,6 +175,43 @@ export function getSchedule() {
 export function getPeriods() {
   load();
   return clone(data.periods);
+}
+
+/**
+ * Archive the current role snapshot as a closed period and apply new roles.
+ * One atomic write: the snapshot, the closing of the previous period and every
+ * member's new roles are committed together, so an interrupted run cannot leave
+ * a half-applied period behind.
+ *
+ * @param {Map<string,string[]>|Object} roleAssignments memberId -> role keys
+ * @returns {{ok:boolean, id:string}}
+ */
+export function startNewPeriod(roleAssignments) {
+  load();
+  const today = todayJalali();
+  const entries = roleAssignments instanceof Map
+    ? [...roleAssignments.entries()]
+    : Object.entries(roleAssignments || {});
+
+  // Close the currently open period (if any) on the same day the new one starts.
+  for (let i = data.periods.length - 1; i >= 0; i -= 1) {
+    if (!data.periods[i].endedAt) { data.periods[i].endedAt = today; break; }
+  }
+
+  const snapshot = data.members
+    .filter((m) => m.active !== false)
+    .map((m) => ({ id: m.id, name: m.name, roles: [...m.roles] }));
+
+  const period = { id: makeId('p'), startedAt: { ...today }, endedAt: null, members: snapshot };
+  data.periods.push(period);
+
+  for (const [memberId, roles] of entries) {
+    const m = data.members.find((x) => x.id === memberId);
+    if (m) m.roles = normalizeRoles(roles);
+  }
+
+  commit('period:start', { id: period.id });
+  return { ok: true, id: period.id };
 }
 
 /* ---------- Member CRUD ---------- */
@@ -355,6 +394,10 @@ export function validateMember(input) {
     const { jy, jm, jd } = input.birth;
     if (!Number.isInteger(jy) || !Number.isInteger(jm) || !Number.isInteger(jd)) {
       errors.birth = 'تاریخ تولد معتبر نیست.';
+    } else if (jm < 1 || jm > 12 || jd < 1) {
+      errors.birth = 'تاریخ تولد معتبر نیست.';
+    } else if (jd > jalaliMonthLength(jy, jm)) {
+      errors.birth = 'این روز در ماه انتخابی وجود ندارد.';
     }
   }
   return errors;
@@ -575,12 +618,13 @@ export function deleteHomework(id) {
 
 /** Clamp a birthday to a valid date (handles Feb 30 style edge cases). */
 function safeBirthday(jy, jm, jd) {
-  try {
-    const day = Math.min(jd, 29); // never exceed the shortest month
-    return { jy, jm, jd: day };
-  } catch {
-    return null;
-  }
+  if (!Number.isInteger(jy) || !Number.isInteger(jm) || !Number.isInteger(jd)) return null;
+  if (jm < 1 || jm > 12 || jd < 1) return null;
+  // Only clamp a day that genuinely does not exist in that month (e.g. 30
+  // Esfand in a common year). Clamping everything to 29 would silently move a
+  // 31 Farvardin birthday two days earlier.
+  const day = Math.min(jd, jalaliMonthLength(jy, jm));
+  return { jy, jm, jd: day };
 }
 
 /** Today's Jalali date, re-exported for convenience in UI modules. */
@@ -657,6 +701,7 @@ export default {
   saveScheduleEntry,
   deleteScheduleEntry,
   getPeriods,
+  startNewPeriod,
   getPayments,
   savePayment,
   getHomeworks,

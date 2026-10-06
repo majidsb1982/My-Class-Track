@@ -257,9 +257,9 @@ export function renderTimer(options = {}) {
   }
 
   function fireAlarm(minutes) {
-    playChime(2);
+    playChime(minutes === 0 ? 3 : 2);
     vibrate();
-    notify('My-Class-Track', alarmPhrase(minutes));
+    notify('My-Class-Track', minutes === 0 ? 'کلاس شروع شد' : alarmPhrase(minutes));
     showAlarm(minutes);
   }
 
@@ -280,10 +280,9 @@ export function renderTimer(options = {}) {
       if (!firedAlarms.has(0)) {
         firedAlarms.add(0);
         saveFired(firedAlarms);
-        playChime(3);
-        vibrate();
-        notify('My-Class-Track', 'کلاس شروع شد');
-        showAlarm(0);
+        // A single path for the chime/vibration/notification so the zero moment
+        // is never announced twice with two different chime lengths.
+        fireAlarm(0);
       }
       stopTicking();
       return;

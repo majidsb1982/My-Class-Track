@@ -1,0 +1,40 @@
+# ============================================================
+#   .github/workflows/ci.yml — Quality gate for every push and PR
+#   Runs the three project checks. No dependencies to install.
+#   The browser smoke test is skipped on CI (no Chrome in the
+#   default runner image) and is meant to be run locally.
+# ============================================================
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Project checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Project health (files, syntax, precache, data round-trip)
+        run: node tools/check-project.mjs
+
+      - name: PWA markup assertions
+        run: node tools/check-html.mjs

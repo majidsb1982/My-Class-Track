@@ -23,19 +23,24 @@
 
   <div class="app-shell">
     <header class="app-header" role="banner">
-      <button class="icon-btn" id="theme-toggle" type="button" aria-label="تغییر تم روشن و تیره" title="تغییر تم">
-        <span class="icon-slot" data-icon="theme" aria-hidden="true"></span>
+      <button class="icon-btn" id="theme-toggle" type="button" aria-label="تغییر تم روشن و تیره" aria-pressed="false" title="تغییر تم">
+        <span class="icon-slot" data-icon="theme" aria-hidden="true">◐</span>
       </button>
       <div class="app-title">
         <span class="app-title__mark" aria-hidden="true">MCT</span>
         <h1 class="app-title__text">My-Class-Track</h1>
       </div>
       <button class="icon-btn" id="quick-help" type="button" aria-label="راهنمای سریع" title="راهنما">
-        <span class="icon-slot" data-icon="help" aria-hidden="true"></span>
+        <span class="icon-slot" data-icon="help" aria-hidden="true">؟</span>
       </button>
     </header>
 
-    <main id="main-content" class="app-main" role="main" tabindex="-1" aria-live="polite"></main>
+    <main id="main-content" class="app-main" role="main" tabindex="-1"></main>
+
+    <!-- Visually hidden live region: app.js writes one short sentence here per
+         navigation, so screen readers announce the page change without the
+         whole re-rendered page being read out. -->
+    <p id="route-status" role="status" aria-live="polite" class="sr-only"></p>
 
     <nav class="bottom-nav" aria-label="ناوبری اصلی">
       <ul class="bottom-nav__list" id="bottom-nav"></ul>
@@ -44,9 +49,6 @@
 
   <!-- Container for dialogs & toasts (built by ui.js) -->
   <div id="overlay-root"></div>
-
-  <!-- Jalali calendar self-test result (phase 2), hidden unless debug enabled -->
-  <div id="selftest" hidden></div>
 
   <noscript>
     <p class="noscript-warning">برای استفاده از این برنامه، جاوااسکریپت مرورگر باید فعال باشد.</p>

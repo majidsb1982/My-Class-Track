@@ -142,7 +142,7 @@ function renderMemberRow(member, record, session, slot, container, date, options
     member.phone
       ? el('a', {
         class: 'btn btn--secondary btn--sm', href: `tel:${member.phone}`,
-        rel: 'noopener', 'aria-label': `تماس با ${member.name}`,
+        'aria-label': `تماس با ${member.name}`,
       }, [icon('phone'), 'تماس'])
       : null,
   ]);

@@ -3,11 +3,17 @@
 Thumbs.db
 *.log
 .vscode/
+.idea/
+*.swp
+*~
 
 # local tooling
 node_modules/
 .qa/
 __pycache__/
+*.pyc
+.single-check.mjs
 
 # build output (recreate with: python build-portable.py)
 dist/
+*.zip

@@ -8,20 +8,10 @@ import {
 } from '../ui.js';
 import { getSchedule, saveScheduleEntry, deleteScheduleEntry, getSessions, exportData, validateBackup, importData, clearAll } from '../store.js';
 import { WEEKDAY_NAMES, toPersianDigits, formatTime, formatJalali, todayJalali } from '../jalali.js';
-import { paymentsCsv, downloadCsv, openReport } from '../reports.js';
+import { getTheme, getFontSize, setPrefs, applyTheme, applyFontSize } from '../prefs.js';
+import { paymentsCsv, downloadCsv, openReport, fileStamp } from '../reports.js';
 
-const APP_VERSION = 'v1.0.0';
-
-/* ---------- Preferences (mirrors app.js; single source per key) ---------- */
-
-const PREF_KEY = 'mct:prefs';
-
-function loadPrefs() {
-  try { return JSON.parse(localStorage.getItem(PREF_KEY)) || {}; } catch { return {}; }
-}
-function savePrefs(prefs) {
-  try { localStorage.setItem(PREF_KEY, JSON.stringify(prefs)); } catch { /* ignore */ }
-}
+const APP_VERSION = 'v1.1.0';
 
 /** Render the settings page into the given container. */
 export function renderSettings(container) {
@@ -185,7 +175,7 @@ function renderReportsCard() {
       type: 'button', class: 'btn btn--secondary grow',
       onclick: () => {
         const s = sessions.find((x) => x.id === select.value) || sessions[0];
-        downloadCsv(`shahrie-${String(s.jy)}-${String(s.jm).padStart(2, '0')}-${String(s.jd).padStart(2, '0')}.csv`, paymentsCsv(s.id));
+        downloadCsv(fileStamp(s, '-shahrie'), paymentsCsv(s.id));
         toast('فایل CSV شهریه دریافت شد.', 'success');
       },
     }, 'CSV شهریه'),
@@ -202,11 +192,11 @@ function renderReportsCard() {
 /* ---------- Appearance ---------- */
 
 function renderAppearanceCard() {
-  const prefs = loadPrefs();
   const card = el('section', { class: 'card' }, []);
   card.append(el('h3', { class: 'card__title' }, [icon('theme'), 'ظاهر برنامه']));
 
-  // Theme segmented control
+  // Theme segmented control — the same store + applier the header toggle uses,
+  // so switching here keeps the header button's aria-pressed state in sync.
   const currentTheme = document.documentElement.dataset.theme || 'light';
   card.append(el('div', { class: 'field' }, [
     el('span', { class: 'field__label' }, 'تم'),
@@ -214,17 +204,15 @@ function renderAppearanceCard() {
       { key: 'light', label: 'روشن' },
       { key: 'dark', label: 'تیره' },
     ], currentTheme, (key) => {
-      document.documentElement.dataset.theme = key;
-      prefs.theme = key;
-      savePrefs(prefs);
-      const meta = document.querySelector('meta[name="theme-color"]');
-      if (meta) meta.setAttribute('content', key === 'dark' ? '#101121' : '#5b5bd6');
+      setPrefs({ theme: key });
+      applyTheme(key);
+      document.dispatchEvent(new CustomEvent('mct:theme-change'));
       toast(key === 'dark' ? 'تم تیره فعال شد.' : 'تم روشن فعال شد.', 'info', 1400);
     }),
   ]));
 
   // Font size segmented control
-  const currentFont = document.documentElement.dataset.fontsize || 'medium';
+  const currentFont = getFontSize();
   card.append(el('div', { class: 'field' }, [
     el('span', { class: 'field__label' }, 'اندازه فونت'),
     segmented([
@@ -232,10 +220,8 @@ function renderAppearanceCard() {
       { key: 'medium', label: 'متوسط' },
       { key: 'large', label: 'بزرگ' },
     ], currentFont, (key) => {
-      if (key === 'medium') document.documentElement.removeAttribute('data-fontsize');
-      else document.documentElement.dataset.fontsize = key;
-      prefs.fontSize = key === 'medium' ? undefined : key;
-      savePrefs(prefs);
+      setPrefs({ fontSize: key });
+      applyFontSize(key);
       toast('اندازه فونت ذخیره شد.', 'success', 1400);
     }),
   ]));

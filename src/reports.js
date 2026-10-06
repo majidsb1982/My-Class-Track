@@ -3,8 +3,7 @@ import { getSession, getMembers, getData, ATTENDANCE_STATUS } from './store.js';
 import { formatJalali, jalaliWeekdayName, toPersianDigits } from './jalali.js';
 import { el, toast, icon, formModal } from './ui.js';
 
-const sessionName = (s) => `${jalaliWeekdayName(s.jy, s.jm, s.jd)} ${formatJalali(s.jy, s.jm, s.jd)}`;
-const membersFor = (s) => {
+const sessionName = (s) => `${jalaliWeekdayName(s.jy, s.jm, s.jd)} ${formatJalali(s.jy, s.jm, s.jd)}`;const membersFor = (s) => {
   const all = getMembers({ includeInactive: true });
   const ids = new Set([...Object.keys(s.slots?.[1] || {}), ...Object.keys(s.slots?.[2] || {})]);
   return all.filter((m) => m.active !== false || ids.has(m.id));
@@ -46,7 +45,7 @@ export function paymentReport(sessionId) {
 }
 
 /** Latin-digit YYYY-MM-DD stamp so filenames stay sortable and shell-safe. */
-function fileStamp(s, suffix = '') {
+export function fileStamp(s, suffix = '') {
   const base = `${s.jy}-${String(s.jm).padStart(2, '0')}-${String(s.jd).padStart(2, '0')}`;
   return `My-Class-Track-${base}${suffix}.csv`;
 }

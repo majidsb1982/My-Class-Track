@@ -123,7 +123,7 @@ export function renderDoorMode(options = {}) {
         member.phone
           ? el('a', {
             class: 'door-card__call', href: `tel:${member.phone}`,
-            rel: 'noopener', 'aria-label': `تماس با ${member.name}`,
+            'aria-label': `تماس با ${member.name}`,
           }, icon('phone'))
           : null,
       ]),

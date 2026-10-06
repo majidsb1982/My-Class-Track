@@ -7,6 +7,9 @@
 import { el, clear, icon, hydrateStaticIcons, toast, confirmDialog, emptyState, pageHead } from './ui.js';
 import { runSelfTest } from './jalali.js';
 import { load as loadStore, subscribe as subscribeStore } from './store.js';
+import {
+  getPrefs, setPrefs, getTheme, getFontSize, applyTheme, applyFontSize,
+} from './prefs.js';
 import { renderMembers } from './pages/members.js';
 import { renderSettings } from './pages/settings.js';
 import { renderAttendance } from './pages/attendance.js';
@@ -43,44 +46,13 @@ const PAGES = {
 
 /* ---------- Theme & preferences ---------- */
 
-const PREF_KEY = 'mct:prefs';
-
-function loadPrefs() {
-  try {
-    return JSON.parse(localStorage.getItem(PREF_KEY)) || {};
-  } catch {
-    return {};
-  }
-}
-
-function savePrefs(prefs) {
-  try {
-    localStorage.setItem(PREF_KEY, JSON.stringify(prefs));
-  } catch {
-    /* storage may be unavailable (private mode) — ignore */
-  }
-}
-
-const prefs = loadPrefs();
-
-function applyTheme(theme) {
-  const resolved = theme === 'light' || theme === 'dark'
-    ? theme
-    : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-  document.documentElement.dataset.theme = resolved;
-  const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute('content', resolved === 'dark' ? '#101121' : '#5b5bd6');
-  return resolved;
-}
-
 function currentResolvedTheme() {
   return document.documentElement.dataset.theme || 'light';
 }
 
 function toggleTheme() {
   const next = currentResolvedTheme() === 'dark' ? 'light' : 'dark';
-  prefs.theme = next;
-  savePrefs(prefs);
+  setPrefs({ theme: next });
   applyTheme(next);
   updateThemeButton();
   toast(next === 'dark' ? 'تم تیره فعال شد.' : 'تم روشن فعال شد.', 'info', 1600);
@@ -89,16 +61,10 @@ function toggleTheme() {
 function updateThemeButton() {
   const btn = document.getElementById('theme-toggle');
   if (!btn) return;
-  btn.setAttribute('aria-pressed', currentResolvedTheme() === 'dark' ? 'true' : 'false');
-  btn.setAttribute('title', currentResolvedTheme() === 'dark' ? 'تغییر به تم روشن' : 'تغییر به تم تیره');
-}
-
-function applyFontSize(size) {
-  if (size === 'small' || size === 'large') {
-    document.documentElement.dataset.fontsize = size;
-  } else {
-    document.documentElement.removeAttribute('data-fontsize');
-  }
+  const isDark = currentResolvedTheme() === 'dark';
+  btn.setAttribute('aria-pressed', isDark ? 'true' : 'false');
+  btn.setAttribute('aria-label', isDark ? 'تغییر به تم روشن' : 'تغییر به تم تیره');
+  btn.setAttribute('title', isDark ? 'تغییر به تم روشن' : 'تغییر به تم تیره');
 }
 
 /* ---------- Navigation ---------- */
@@ -174,6 +140,8 @@ function renderRoute(routeId, { keepOptions = false } = {}) {
 
   setActiveNav(route.id);
   document.title = `${route.title} — My-Class-Track`;
+  const status = document.getElementById('route-status');
+  if (status) status.textContent = `صفحه ${route.title} باز شد`;
   main.focus({ preventScroll: true });
   window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
 }
@@ -237,14 +205,12 @@ function registerServiceWorker() {
 function reportSelfTest() {
   try {
     const { ok, results } = runSelfTest();
-    const box = document.getElementById('selftest');
-    if (!box) return;
     const failed = results.filter((r) => !r.pass);
-    box.dataset.ok = String(ok);
-    box.hidden = ok;
     if (!ok) {
-      box.textContent = 'خطا در تبدیل تقویم: ' + failed.map((r) => `${r.name} (${r.actual})`).join(' ، ');
       console.error('[jalali self-test] failed', failed);
+      console.table(failed.map((r) => ({ name: r.name, expected: r.expected, actual: r.actual })));
+    } else if (getPrefs().debug) {
+      console.table(results.map((r) => ({ name: r.name, expected: r.expected, actual: r.actual, pass: r.pass })));
     }
   } catch (err) {
     console.error('[jalali self-test] error', err);
@@ -254,8 +220,8 @@ function reportSelfTest() {
 /* ---------- Bootstrap ---------- */
 
 function init() {
-  applyTheme(prefs.theme);
-  applyFontSize(prefs.fontSize);
+  applyTheme(getTheme());
+  applyFontSize(getFontSize());
   hydrateStaticIcons();
   updateThemeButton();
 
@@ -270,6 +236,10 @@ function init() {
 
   const themeBtn = document.getElementById('theme-toggle');
   if (themeBtn) themeBtn.addEventListener('click', toggleTheme);
+
+  // Settings changes the theme through the shared prefs module; keep the
+  // header button's pressed state in sync with it.
+  document.addEventListener('mct:theme-change', updateThemeButton);
 
   const helpBtn = document.getElementById('quick-help');
   if (helpBtn) helpBtn.addEventListener('click', showQuickHelp);
@@ -286,7 +256,7 @@ function init() {
 
   // Follow OS theme changes only while the user has not chosen explicitly.
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-    if (!prefs.theme) { applyTheme(undefined); updateThemeButton(); }
+    if (!getTheme()) { applyTheme(undefined); updateThemeButton(); }
   });
 
   reportSelfTest();

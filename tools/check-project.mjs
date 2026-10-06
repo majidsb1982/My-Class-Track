@@ -15,7 +15,7 @@ for (const f of [
   'index.html', 'offline.html', 'manifest.webmanifest', 'sw.js',
   'README.md', 'CHANGELOG.md', 'AGENTS.md', 'PROJECT_REPORT.md',
   'src/styles.css', 'src/jalali.js', 'src/store.js', 'src/ui.js',
-  'src/reports.js', 'src/timer.js', 'src/app.js',
+  'src/reports.js', 'src/timer.js', 'src/app.js', 'src/prefs.js',
   'src/pages/home.js', 'src/pages/attendance.js', 'src/pages/door.js',
   'src/pages/payment.js', 'src/pages/homework.js', 'src/pages/members.js',
   'src/pages/settings.js',
@@ -29,7 +29,7 @@ for (const f of [
 }
 
 console.log('\n2. Module syntax');
-for (const f of ['src/jalali.js', 'src/store.js', 'src/ui.js', 'src/reports.js', 'src/timer.js', 'src/app.js']) {
+for (const f of ['src/jalali.js', 'src/store.js', 'src/ui.js', 'src/reports.js', 'src/timer.js', 'src/app.js', 'src/prefs.js']) {
   try {
     execFileSync(process.execPath, ['--check', join(ROOT, f)], { stdio: 'pipe' });
     ok(`parses ${f}`);
@@ -55,7 +55,7 @@ else {
 
 console.log('\n4. Every app module is precached');
 const appModules = ['src/app.js', 'src/ui.js', 'src/jalali.js', 'src/store.js',
-  'src/timer.js', 'src/reports.js', 'src/pages/home.js', 'src/pages/attendance.js',
+  'src/timer.js', 'src/reports.js', 'src/prefs.js', 'src/pages/home.js', 'src/pages/attendance.js',
   'src/pages/door.js', 'src/pages/payment.js', 'src/pages/homework.js',
   'src/pages/members.js', 'src/pages/settings.js'];
 for (const m of appModules) {
@@ -72,6 +72,60 @@ try {
   ok(`jalali ${out}`);
 } catch (e) {
   bad(`jalali self-test failed: ${String(e.stdout || e).slice(0, 200)}`);
+}
+
+console.log('\n5b. Store round-trip (memory storage shim)');
+try {
+  const script = `
+    const mem = new Map();
+    globalThis.localStorage = {
+      getItem: (k) => (mem.has(k) ? mem.get(k) : null),
+      setItem: (k, v) => mem.set(k, String(v)),
+      removeItem: (k) => mem.delete(k),
+    };
+    const s = await import('./src/store.js');
+    s.load();
+    const a = s.saveMember({ name: 'علی', phone: '۰۹۱۲۳۴۵۶۷۸۹', roles: ['attendance'], birth: { jy: 1400, jm: 1, jd: 31 } });
+    const b = s.saveMember({ name: 'مریم', roles: ['payment'], birth: { jy: 1399, jm: 12, jd: 30 } });
+    if (!a.ok || !b.ok) throw new Error('saveMember failed');
+
+    // Phone must be normalised to latin digits.
+    const al = s.getMember(a.id);
+    if (al.phone !== '09123456789') throw new Error('phone not normalised: ' + al.phone);
+
+    // A 31-day birthday must survive untouched (was clamped to 29 before).
+    if (al.birth.jd !== 31) throw new Error('birthday clamped: ' + al.birth.jd);
+
+    // An impossible date (30 Esfand in a common year) must be rejected, not stored.
+    const badBirth = s.saveMember({ name: 'بد', roles: [], birth: { jy: 1402, jm: 12, jd: 30 } });
+    if (badBirth.ok) throw new Error('impossible birthday accepted');
+    if (!badBirth.errors.birth) throw new Error('missing birth error message');
+
+    // New period: archive the snapshot AND apply the new roles atomically.
+    s.startNewPeriod(new Map([[a.id, ['supporter']]]));
+    const after = s.getMember(a.id);
+    if (after.roles.join() !== 'supporter') throw new Error('roles not applied: ' + after.roles);
+    if (after.name !== 'علی' || after.birth.jd !== 31) throw new Error('member data lost during period change');
+    const periods = s.getPeriods();
+    if (periods.length !== 1 || periods[0].members.length !== 2) throw new Error('period not archived');
+
+    // Backup -> wipe -> restore must round-trip everything.
+    const backup = s.exportData();
+    s.clearAll();
+    if (s.getMembers().length !== 0) throw new Error('clearAll did not wipe');
+    const restored = s.importData(backup);
+    if (!restored.ok) throw new Error('import failed');
+    const back = s.getMember(a.id);
+    if (!back || back.roles.join() !== 'supporter') throw new Error('restore lost roles');
+    if (s.getPeriods().length !== 1) throw new Error('restore lost periods');
+    console.log('ok');
+  `;
+  const out = execFileSync(process.execPath, ['--input-type=module', '-e', script], {
+    cwd: ROOT, stdio: 'pipe',
+  }).toString().trim();
+  ok(`store round-trip ${out}`);
+} catch (e) {
+  bad(`store round-trip failed: ${String(e.stderr || e.stdout || e).slice(0, 300)}`);
 }
 
 console.log('\n6. Manifest sanity');
