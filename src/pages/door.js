@@ -5,6 +5,7 @@
    ============================================================ */
 
 import { el, icon, toast, confirmDialog } from '../ui.js';
+import { avatarNode } from '../media.js';
 import {
   ATTENDANCE_STATUS, STATUS_KEYS,
   getMembers, getSession, setAttendance, attendanceProgress,
@@ -146,7 +147,10 @@ export function renderDoorMode(options = {}) {
 
     // Name + previous round badge + call button
     const head = el('div', { class: 'door-card__head' }, [
-      el('div', { class: 'door-card__name' }, member.name),
+      el('div', { class: 'door-card__who' }, [
+        avatarNode(member, { size: 'md' }),
+        el('div', { class: 'door-card__name' }, member.name),
+      ]),
       el('div', { class: 'door-card__head-right' }, [
         previous?.status
           ? el('span', {

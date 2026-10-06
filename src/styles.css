@@ -265,7 +265,9 @@ a:hover { text-decoration: underline; }
 }
 .bottom-nav__list {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  /* Seven destinations: they must stay thumb-reachable, so the icons shrink
+     slightly rather than the bar growing taller. */
+  grid-template-columns: repeat(7, 1fr);
   max-width: var(--content-max);
   margin: 0 auto;
   height: var(--nav-height);
@@ -278,11 +280,11 @@ a:hover { text-decoration: underline; }
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
+  gap: 2px;
   min-width: var(--touch-min);
   min-height: var(--touch-min);
   color: var(--color-text-muted);
-  font-size: 0.68rem;
+  font-size: 0.62rem;
   font-weight: 600;
   border: none;
   background: none;
@@ -290,7 +292,7 @@ a:hover { text-decoration: underline; }
   transition: color var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
   position: relative;
 }
-.nav-link .icon-slot { width: 24px; height: 24px; }
+.nav-link .icon-slot { width: 22px; height: 22px; }
 .nav-link:active { transform: scale(0.94); }
 .nav-link:hover { color: var(--color-text); }
 .nav-link[aria-current="page"] { color: var(--color-primary); }
@@ -1247,4 +1249,190 @@ a:hover { text-decoration: underline; }
     line-height: 1.9;
   }
   .report-panel { break-inside: avoid; }
+}
+/* ============================================================
+   Avatars — a photo when the member has one, otherwise initials.
+   The hue comes from the name (see media.js) so it never clashes
+   and stays stable for the same person.
+   ============================================================ */
+
+.avatar {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  border-radius: 50%;
+  overflow: hidden;
+  background: hsl(var(--avatar-hue, 240) 62% 88%);
+  color: hsl(var(--avatar-hue, 240) 45% 26%);
+  font-weight: 800;
+  user-select: none;
+  border: 2px solid var(--color-surface);
+  box-shadow: var(--shadow-xs);
+}
+
+.avatar--sm { width: 36px; height: 36px; font-size: 0.78rem; }
+.avatar--md { width: 46px; height: 46px; font-size: 0.95rem; }
+.avatar--lg { width: 76px; height: 76px; font-size: 1.5rem; }
+
+.avatar__img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.avatar__initials { line-height: 1; }
+
+:root[data-theme="dark"] .avatar {
+  background: hsl(var(--avatar-hue, 240) 38% 24%);
+  color: hsl(var(--avatar-hue, 240) 70% 82%);
+  border-color: var(--color-surface-2);
+}
+
+/* Member rows that carry an avatar need it beside the text. */
+.list-item__body--avatar {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+/* Avatar + name pairs used in the attendance and door cards. */
+.attend-card__who,
+.door-card__who {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.attend-card__who .attend-card__name,
+.door-card__who .door-card__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- Avatar picker (member form) ---------- */
+
+.avatar-picker__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+.avatar-picker__actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+.avatar-picker__preview { flex: none; }
+
+/* ---------- Voice notes ---------- */
+
+.voice-note {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface-2);
+  border-radius: var(--radius-md);
+  margin-top: var(--space-2);
+}
+.voice-note audio { flex: 1; height: 34px; min-width: 0; }
+.voice-note__meta { font-size: 0.78rem; color: var(--color-text-muted); flex: none; }
+
+.recording-indicator {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-danger);
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+.recording-indicator__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-danger);
+  animation: rec-pulse 1s ease-in-out infinite;
+}
+@keyframes rec-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.8); }
+}
+
+/* ---------- Reminders ---------- */
+
+.list-item--urgent {
+  border-color: var(--color-danger);
+  background: var(--color-danger-soft);
+}
+
+.reminder-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: var(--space-5);
+  background: rgba(12, 13, 26, 0.72);
+  backdrop-filter: blur(6px);
+  animation: fade-in var(--dur-base) var(--ease);
+}
+
+.reminder-overlay__card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--color-surface);
+  border-radius: var(--radius-xl);
+  padding: var(--space-7) var(--space-6);
+  text-align: center;
+  box-shadow: var(--shadow-lg);
+  animation: pop-in var(--dur-base) var(--ease);
+}
+
+.reminder-overlay__icon {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto var(--space-4);
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+}
+.reminder-overlay__icon svg { width: 32px; height: 32px; }
+
+.reminder-overlay__title {
+  font-size: 1.35rem;
+  font-weight: 800;
+  line-height: 1.5;
+}
+.reminder-overlay__place {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+  color: var(--color-primary);
+  font-weight: 700;
+}
+.reminder-overlay__place svg { width: 18px; height: 18px; }
+.reminder-overlay__note {
+  margin-top: var(--space-3);
+  color: var(--color-text-muted);
+}
+.reminder-overlay__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes pop-in {
+  from { opacity: 0; transform: scale(0.94) translateY(8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reminder-overlay,
+  .reminder-overlay__card,
+  .recording-indicator__dot { animation: none; }
 }

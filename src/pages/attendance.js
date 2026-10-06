@@ -7,6 +7,7 @@
 import {
   el, icon, toast, pageHead, emptyState, formModal,
 } from '../ui.js';
+import { canRecord, createRecorder, formatDuration, avatarNode } from '../media.js';
 import {
   ATTENDANCE_STATUS, STATUS_KEYS,
   getMembers, getSessions, ensureSession, getSession,
@@ -202,7 +203,10 @@ function renderMemberRow(member, record, session, slot, container, date, options
   const card = el('li', { class: 'attend-card' });
 
   const head = el('div', { class: 'attend-card__head' }, [
-    el('div', { class: 'attend-card__name' }, member.name),
+    el('div', { class: 'attend-card__who' }, [
+      avatarNode(member, { size: 'sm' }),
+      el('div', { class: 'attend-card__name' }, member.name),
+    ]),
     member.phone
       ? el('a', {
         class: 'btn btn--secondary btn--sm', href: `tel:${member.phone}`,
@@ -266,7 +270,9 @@ function renderMemberRow(member, record, session, slot, container, date, options
         'aria-label': 'یادداشت',
       });
       input.addEventListener('change', () => {
-        setAttendance(session.id, slot, member.id, { status: rec.status, note: input.value, lateTime: rec.lateTime });
+        setAttendance(session.id, slot, member.id, {
+          status: rec.status, note: input.value, lateTime: rec.lateTime, voice: rec.voice, voiceMs: rec.voiceMs,
+        });
         toast('یادداشت ذخیره شد.', 'success', 1200);
       });
       extras.append(el('div', { class: 'field' }, [
@@ -274,6 +280,10 @@ function renderMemberRow(member, record, session, slot, container, date, options
         input,
       ]));
     }
+
+    // A voice note is often faster than typing on a phone, and it keeps the
+    // member's own words (reason for absence, a new phone number, …).
+    extras.append(renderVoiceNote(session, slot, member, rec));
   }
 
   function onStatusClick(key) {
@@ -292,6 +302,97 @@ function renderMemberRow(member, record, session, slot, container, date, options
 
   refreshExtras();
   return card;
+}
+
+/* ---------- Voice note ---------- */
+
+/**
+ * The record / play / delete control for one attendance entry.
+ * Returns null when the browser cannot record and there is nothing to play.
+ */
+function renderVoiceNote(session, slot, member, rec) {
+  const supported = canRecord();
+  if (!supported && !rec.voice) return null;
+
+  const wrap = el('div', { class: 'voice-note-wrap mt-2' });
+
+  const render = (current) => {
+    wrap.replaceChildren();
+
+    // Playback of an existing clip.
+    if (current.voice) {
+      const audio = el('audio', { controls: true, preload: 'metadata', src: current.voice });
+      wrap.append(el('div', { class: 'voice-note' }, [
+        audio,
+        current.voiceMs
+          ? el('span', { class: 'voice-note__meta' }, formatDuration(current.voiceMs))
+          : null,
+        el('button', {
+          type: 'button', class: 'icon-btn icon-btn--danger', 'aria-label': 'حذف صدا',
+          onclick: () => save({ ...current, voice: '', voiceMs: 0 }),
+        }, icon('trash')),
+      ]));
+    }
+
+    if (!supported) return;
+
+    // Record / stop control.
+    const label = el('span', {}, current.voice ? 'ضبط مجدد' : 'ضبط صدا');
+    const indicator = el('span', { class: 'recording-indicator', hidden: true }, [
+      el('span', { class: 'recording-indicator__dot' }),
+      el('span', { class: 'rec-time' }, '۰:۰۰'),
+    ]);
+
+    const btn = el('button', {
+      type: 'button', class: 'btn btn--secondary btn--sm',
+    }, [icon('mic'), label]);
+
+    const recorder = createRecorder({
+      onTick: (ms) => { indicator.querySelector('.rec-time').textContent = formatDuration(ms); },
+      onStop: (dataUrl, ms) => {
+        indicator.hidden = true;
+        btn.replaceChildren(icon('mic'), label);
+        label.textContent = 'ضبط مجدد';
+        if (!dataUrl) {
+          toast('ضبط صدایی ذخیره نشد.', 'info', 1600);
+          return;
+        }
+        save({ ...current, voice: dataUrl, voiceMs: ms });
+        toast('صدا ذخیره شد.', 'success', 1400);
+      },
+    });
+
+    btn.addEventListener('click', async () => {
+      if (recorder.isRecording()) { recorder.stop(); return; }
+      const res = await recorder.start();
+      if (!res.ok) { toast(res.error, 'error'); return; }
+      indicator.hidden = false;
+      btn.replaceChildren(icon('close'), 'توقف ضبط');
+      label.textContent = 'توقف ضبط';
+    });
+
+    wrap.append(el('div', { class: 'btn-row mt-2' }, [btn, indicator]));
+    wrap.append(el('span', { class: 'field__hint' }, 'حداکثر یک دقیقه. صدا فقط روی همین دستگاه ذخیره می‌شود.'));
+  };
+
+  /** Persist a changed voice note on the current attendance record. */
+  function save(next) {
+    const result = setAttendance(session.id, slot, member.id, {
+      status: rec.status,
+      lateTime: rec.lateTime,
+      note: rec.note,
+      voice: next.voice,
+      voiceMs: next.voiceMs,
+    });
+    if (result.ok) {
+      rec.voice = next.voice;
+      rec.voiceMs = next.voiceMs;
+      render(rec);
+    }
+  }
+
+  render(rec);
+  return wrap;
 }
 
 /* ---------- Session picker ---------- */

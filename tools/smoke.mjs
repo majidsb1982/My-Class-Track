@@ -234,7 +234,7 @@ const offlineTitle = await page
   .catch(() => "");
 check(
   "app loads offline from cache",
-  offlineOk === 6 && !!offlineTitle,
+  offlineOk === 7 && !!offlineTitle,
   `${offlineOk} nav links, "${offlineTitle}"`,
 );
 await ctx.setOffline(false);
@@ -307,6 +307,62 @@ check("door tap re-renders one card, not the list",
   afterTap.probe === "kept" && afterTap.count === beforeTap, JSON.stringify(afterTap));
 
 check("no console errors after upgrades", errors.length === 0, errors.slice(0, 3).join(" | "));
+
+// 7. Reminders: create one, confirm it is persisted and rendered.
+await page.evaluate(() => localStorage.removeItem("mct:data"));
+await page.goto(BASE, { waitUntil: "domcontentloaded" });
+await page.waitForSelector(".nav-link", { timeout: 15000 });
+await page.click('.nav-link[data-route="reminders"]');
+await page.waitForSelector(".page-title", { timeout: 5000 });
+const remindersEmpty = await page.locator(".empty-state").count();
+check("reminders page shows empty state", remindersEmpty === 1, String(remindersEmpty));
+
+await page.locator(".empty-state button").first().click();
+await page.waitForSelector(".dialog--form", { timeout: 5000 });
+await page.fill('.dialog--form input[type="text"]', "واریز شهریه");
+await page.evaluate(() =>
+  [...document.querySelectorAll(".dialog__actions button")]
+    .find((b) => b.type === "submit")
+    .click(),
+);
+await wait(500);
+const remState = await page.evaluate(() => {
+  const d = JSON.parse(localStorage.getItem("mct:data") || "null");
+  return { count: d?.reminders?.length, title: d?.reminders?.[0]?.title, hasAt: !!d?.reminders?.[0]?.at };
+});
+check("reminder persisted", remState.count === 1 && remState.hasAt, JSON.stringify(remState));
+const remCards = await page.locator(".list-item").count();
+check("reminder rendered in list", remCards >= 1, String(remCards));
+
+// 8. Avatar: initials fallback renders for a member without a photo.
+await page.click('.nav-link[data-route="members"]');
+await page.waitForSelector(".btn", { timeout: 5000 });
+await page.evaluate(() =>
+  [...document.querySelectorAll("button")]
+    .find((b) => b.textContent.includes("افزودن عضو"))
+    .click(),
+);
+await page.waitForSelector(".dialog--form", { timeout: 5000 });
+const hasPicker = await page.locator(".avatar-picker").count();
+check("member form has avatar picker", hasPicker === 1, String(hasPicker));
+const initials = await page.locator(".avatar-picker .avatar__initials").innerText();
+check("avatar picker shows initials fallback", initials.trim().length > 0, initials);
+
+await page.fill('.dialog--form input[type="text"]', "مریم احمدی");
+await page.evaluate(() =>
+  [...document.querySelectorAll(".dialog__actions button")]
+    .find((b) => b.type === "submit")
+    .click(),
+);
+await wait(500);
+const avatarHue = await page.evaluate(() => {
+  const a = document.querySelector(".list-item .avatar");
+  return a ? { initials: a.textContent.trim(), hue: a.style.getPropertyValue("--avatar-hue") } : null;
+});
+check("member list renders an avatar", !!avatarHue && avatarHue.initials.length > 0,
+  JSON.stringify(avatarHue));
+
+check("no console errors after new features", errors.length === 0, errors.slice(0, 3).join(" | "));
 
 const failed = results.filter((r) => !r.pass);
 console.log(

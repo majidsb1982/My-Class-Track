@@ -8,6 +8,7 @@ import {
   textField, textAreaField, checkboxChips, formModal,
   createJalaliDatePicker, debounce,
 } from '../ui.js';
+import { avatarNode, fileToAvatar } from '../media.js';
 import {
   ROLES, ROLE_KEYS, getMembers, saveMember, archiveMember,
   getPeriods, startNewPeriod, findPhoneOwner,
@@ -58,6 +59,74 @@ export function renderMembers(container) {
 
   // Periods archive
   container.append(renderPeriodsSection());
+}
+
+/* ---------- Avatar picker ---------- */
+
+/**
+ * A round avatar preview with «انتخاب عکس» and «حذف» actions.
+ * The chosen file is downscaled before it is ever stored, so a phone photo
+ * from a modern camera does not blow the localStorage quota.
+ *
+ * @returns {{root: HTMLElement, getValue: () => string}}
+ */
+function createAvatarPicker(member) {
+  let current = member?.avatar || '';
+  // The picker sits above the name field, so the preview should follow what the
+  // user is typing rather than showing «؟» until the form is saved.
+  let nameForPreview = member?.name || '';
+
+  const preview = el('div', { class: 'avatar-picker__preview' });
+  const fileInput = el('input', {
+    type: 'file', accept: 'image/*', class: 'visually-hidden',
+    'aria-label': 'انتخاب عکس عضو',
+  });
+
+  const render = () => {
+    preview.replaceChildren(
+      avatarNode({ name: nameForPreview || 'عضو جدید', avatar: current }, { size: 'lg' }),
+    );
+  };
+
+  fileInput.addEventListener('change', async () => {
+    const file = fileInput.files?.[0];
+    fileInput.value = '';
+    if (!file) return;
+    try {
+      current = await fileToAvatar(file);
+      render();
+      toast('عکس انتخاب شد.', 'success', 1400);
+    } catch (err) {
+      toast(err.message || 'تصویر خوانده نشد.', 'error');
+    }
+  });
+
+  const chooseBtn = el('button', {
+    type: 'button', class: 'btn btn--secondary btn--sm',
+    onclick: () => fileInput.click(),
+  }, [icon('camera'), 'انتخاب عکس']);
+
+  const clearBtn = el('button', {
+    type: 'button', class: 'btn btn--ghost btn--sm',
+    onclick: () => { current = ''; render(); },
+  }, 'حذف عکس');
+
+  const root = el('div', { class: 'field avatar-picker' }, [
+    el('span', { class: 'field__label' }, 'عکس عضو'),
+    el('div', { class: 'avatar-picker__row' }, [
+      preview,
+      el('div', { class: 'avatar-picker__actions' }, [chooseBtn, clearBtn, fileInput]),
+    ]),
+    el('span', { class: 'field__hint' }, 'در صورت نبود عکس، حروف اول نام نمایش داده می‌شود.'),
+  ]);
+
+  render();
+  return {
+    root,
+    getValue: () => current,
+    /** Keep the preview initials in step with the name field. */
+    setName: (value) => { nameForPreview = value; if (!current) render(); },
+  };
 }
 
 /* ---------- List ---------- */
@@ -113,15 +182,20 @@ function renderMemberItem(m, archived = false) {
 
   const metaBits = [];
   if (m.phone) metaBits.push(m.phone);
+  if (m.phone2) metaBits.push(`شماره دوم: ${m.phone2}`);
+  if (m.address) metaBits.push(m.address);
   if (m.birth) {
     metaBits.push(`تولد: ${formatJalali(m.birth.jy, m.birth.jm, m.birth.jd)}`);
   }
 
-  const body = el('div', { class: 'list-item__body' }, [
-    el('div', { class: 'list-item__title' }, m.name),
-    roleBadges.length ? el('div', { class: 'badge-row mt-2' }, roleBadges) : null,
-    metaBits.length ? el('div', { class: 'list-item__meta' }, metaBits.join(' • ')) : null,
-    m.note ? el('div', { class: 'list-item__meta' }, m.note) : null,
+  const body = el('div', { class: 'list-item__body list-item__body--avatar' }, [
+    avatarNode(m, { size: 'md' }),
+    el('div', { class: 'grow' }, [
+      el('div', { class: 'list-item__title' }, m.name),
+      roleBadges.length ? el('div', { class: 'badge-row mt-2' }, roleBadges) : null,
+      metaBits.length ? el('div', { class: 'list-item__meta' }, metaBits.join(' • ')) : null,
+      m.note ? el('div', { class: 'list-item__meta' }, m.note) : null,
+    ]),
   ]);
 
   const actions = el('div', { class: 'list-item__actions' }, [
@@ -186,6 +260,20 @@ function openMemberForm(member) {
     const owner = findPhoneOwner(value, member?.id);
     if (owner) phoneField.setError(`این شماره قبلاً برای «${owner}» ثبت شده است.`);
   });
+
+  const phone2Field = textField({
+    label: 'شماره دوم (اختیاری)', type: 'tel', inputMode: 'tel',
+    placeholder: 'شماره پدر، مادر یا همراه', value: member?.phone2 || '',
+  });
+
+  const addressField = textField({
+    label: 'نشانی / محله (اختیاری)',
+    placeholder: 'مثلاً: تهران، ونک', value: member?.address || '',
+  });
+
+  const avatarPicker = createAvatarPicker(member);
+  // Live preview: as the name is typed the initials avatar updates with it.
+  nameField.input.addEventListener('input', () => avatarPicker.setName(nameField.getValue()));
   const noteField = textAreaField({
     label: 'یادداشت', placeholder: 'نکته‌ای درباره این عضو…',
     value: member?.note || '',
@@ -204,8 +292,11 @@ function openMemberForm(member) {
   birthError.hidden = true;
 
   const body = el('div', {}, [
+    avatarPicker.root,
     nameField.root,
     phoneField.root,
+    phone2Field.root,
+    addressField.root,
     el('div', { class: 'field' }, [
       el('span', { class: 'field__label' }, 'تاریخ تولد'),
       birthPicker.root,
@@ -227,6 +318,9 @@ function openMemberForm(member) {
         id: member?.id,
         name: nameField.getValue(),
         phone: phoneField.getValue(),
+        phone2: phone2Field.getValue(),
+        address: addressField.getValue(),
+        avatar: avatarPicker.getValue(),
         birth: birthPicker.getValue(),
         roles: rolesChips.getValue(),
         note: noteField.getValue(),
@@ -235,6 +329,7 @@ function openMemberForm(member) {
       if (!result.ok) {
         nameField.setError(result.errors.name);
         phoneField.setError(result.errors.phone);
+        phone2Field.setError(result.errors.phone2);
         birthError.textContent = result.errors.birth || '';
         birthError.hidden = !result.errors.birth;
         return result.errors;

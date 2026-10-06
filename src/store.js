@@ -10,7 +10,7 @@ import {
 /* ---------- Config ---------- */
 
 const ROOT_KEY = 'mct:data';
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 /** Application roles a member can hold. */
 export const ROLES = {
@@ -33,6 +33,7 @@ function createDefaultData() {
     homeworks: [],      // { id, jy,jm,jd, text }
     classSchedule: [],  // { id, weekday:0..6 (0=Sat), start:"19:00", end:"21:00" }
     periods: [],        // archived role assignments: { id, startedAt, endedAt, members:[{id,name,roles}] }
+    reminders: [],      // { id, title, at, place, note, done, firedAt }
     meta: { createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
   };
 }
@@ -63,15 +64,21 @@ function migrate(input) {
   out.version = SCHEMA_VERSION;
 
   // Ensure array fields are arrays.
-  for (const key of ['members', 'sessions', 'payments', 'homeworks', 'classSchedule', 'periods']) {
+  for (const key of ['members', 'sessions', 'payments', 'homeworks', 'classSchedule', 'periods', 'reminders']) {
     if (!Array.isArray(out[key])) out[key] = [];
   }
 
   // Normalise members (v0 -> v1: roles string -> array, Persian labels -> keys)
+  // (v1 -> v2: avatar, second phone, address; recordings on attendance records)
   out.members = out.members.map((m) => ({
     id: m.id || makeId('m'),
     name: typeof m.name === 'string' ? m.name : '',
     phone: typeof m.phone === 'string' ? m.phone : '',
+    phone2: typeof m.phone2 === 'string' ? m.phone2 : '',
+    address: typeof m.address === 'string' ? m.address : '',
+    // Avatars are small data-URLs; drop anything that is not one so a corrupt
+    // backup cannot smuggle a huge or non-image string into storage.
+    avatar: isDataImage(m.avatar) ? m.avatar : '',
     birth: m.birth && typeof m.birth === 'object' ? m.birth : null,
     roles: normalizeRoles(m.roles),
     note: typeof m.note === 'string' ? m.note : '',
@@ -79,8 +86,25 @@ function migrate(input) {
     createdAt: m.createdAt || new Date().toISOString(),
   }));
 
+  out.reminders = out.reminders.map((r) => ({
+    id: r.id || makeId('r'),
+    title: typeof r.title === 'string' ? r.title : '',
+    at: typeof r.at === 'string' ? r.at : '',
+    place: typeof r.place === 'string' ? r.place : '',
+    note: typeof r.note === 'string' ? r.note : '',
+    done: r.done === true,
+    firedAt: typeof r.firedAt === 'string' ? r.firedAt : '',
+  })).filter((r) => r.title && r.at);
+
   out.meta = { ...base.meta, ...(input.meta || {}) };
   return out;
+}
+
+/** Is this value a small inline image data-URL we are willing to store? */
+function isDataImage(value) {
+  return typeof value === 'string'
+    && /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(value)
+    && value.length <= 120000; // ~90 KB of binary, enough for a 160px avatar
 }
 
 /** Load data from localStorage (idempotent). */
@@ -230,6 +254,9 @@ export function saveMember(input) {
     id: input.id || makeId('m'),
     name: String(input.name).trim(),
     phone: normalizePhone(input.phone),
+    phone2: normalizePhone(input.phone2),
+    address: String(input.address || '').trim(),
+    avatar: isDataImage(input.avatar) ? input.avatar : '',
     birth: input.birth ? { jy: input.birth.jy, jm: input.birth.jm, jd: input.birth.jd } : null,
     roles: normalizeRoles(input.roles),
     note: String(input.note || '').trim(),
@@ -324,7 +351,7 @@ export function getSession(id) {
  * @param {string} sessionId
  * @param {1|2} slot
  * @param {string} memberId
- * @param {Object} entry { status, lateTime, note }
+ * @param {Object} entry { status, lateTime, note, voice }
  */
 export function setAttendance(sessionId, slot, memberId, entry) {
   load();
@@ -347,10 +374,25 @@ export function setAttendance(sessionId, slot, memberId, entry) {
     if (entry.status === 'late' && lateTime) rec.lateTime = lateTime;
     const note = String(entry.note || '').trim();
     if (note) rec.note = note;
+    // A voice note is an audio data-URL; cap it so one long clip cannot fill
+    // the whole storage quota. `duration` is in milliseconds.
+    if (isAudioData(entry.voice)) {
+      rec.voice = entry.voice;
+      if (Number.isFinite(entry.voiceMs) && entry.voiceMs > 0) {
+        rec.voiceMs = Math.round(entry.voiceMs);
+      }
+    }
     session.slots[key][memberId] = rec;
   }
   commit('attendance:set', { sessionId, slot: key, memberId });
   return { ok: true };
+}
+
+/** Is this value an audio data-URL small enough to store? */
+function isAudioData(value) {
+  return typeof value === 'string'
+    && /^data:audio\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=]+$/i.test(value)
+    && value.length <= 900000; // ~650 KB of audio, about a minute of opus
 }
 
 /** How many members have a decision in the given slot. */
@@ -387,6 +429,16 @@ export function validateMember(input) {
     const digits = toLatinDigitsLocal(phone).replace(/[\s()-]/g, '');
     if (!/^0?9\d{9}$/.test(digits) && !/^0\d{2,3}\d{7,8}$/.test(digits)) {
       errors.phone = 'شماره تماس معتبر نیست (مثال: ۰۹۱۲۳۴۵۶۷۸۹).';
+    }
+  }
+
+  const phone2 = String(input?.phone2 || '').trim();
+  if (phone2) {
+    const digits = toLatinDigitsLocal(phone2).replace(/[\s()-]/g, '');
+    if (!/^0?9\d{9}$/.test(digits) && !/^0\d{2,3}\d{7,8}$/.test(digits)) {
+      errors.phone2 = 'شماره دوم معتبر نیست.';
+    } else if (phone && toLatinDigitsLocal(phone).replace(/[\s()-]/g, '') === digits) {
+      errors.phone2 = 'شماره دوم با شماره اول یکسان است.';
     }
   }
   if (input?.birth) {
@@ -537,6 +589,98 @@ export function getUpcomingBirthdays(days = 7, from = new Date()) {
     }
   }
   return out.sort((a, b) => a.daysLeft - b.daysLeft);
+}
+
+/* ---------- Reminders ---------- */
+
+/**
+ * List reminders, soonest first. Finished ones are excluded unless asked for.
+ * @param {{includeDone?: boolean}} [options]
+ */
+export function getReminders({ includeDone = false } = {}) {
+  load();
+  return clone(data.reminders
+    .filter((r) => includeDone || !r.done)
+    .sort((a, b) => String(a.at).localeCompare(String(b.at))));
+}
+
+export function getReminder(id) {
+  load();
+  const r = data.reminders.find((x) => x.id === id);
+  return r ? clone(r) : null;
+}
+
+/**
+ * Create or update a reminder.
+ * @param {Object} input { id?, title, at (ISO), place, note }
+ * @returns {{ok:boolean, id?:string, errors?:Object}}
+ */
+export function saveReminder(input) {
+  load();
+  const errors = {};
+  const title = String(input?.title || '').trim();
+  if (!title) errors.title = 'عنوان یادآور را وارد کنید.';
+  else if (title.length > 120) errors.title = 'عنوان بیش از حد طولانی است.';
+
+  const at = String(input?.at || '');
+  const when = at ? new Date(at) : null;
+  if (!when || Number.isNaN(when.getTime())) errors.at = 'زمان یادآور معتبر نیست.';
+
+  if (Object.keys(errors).length) return { ok: false, errors };
+
+  const item = {
+    id: input.id || makeId('r'),
+    title,
+    at: when.toISOString(),
+    place: String(input.place || '').trim(),
+    note: String(input.note || '').trim(),
+    done: input.done === true,
+    firedAt: input.firedAt || '',
+  };
+  const idx = data.reminders.findIndex((r) => r.id === item.id);
+  if (idx === -1) data.reminders.push(item);
+  else data.reminders[idx] = { ...data.reminders[idx], ...item };
+  commit('reminder:save', { id: item.id });
+  return { ok: true, id: item.id };
+}
+
+/** Mark a reminder as done (or bring it back). */
+export function setReminderDone(id, done = true) {
+  load();
+  const r = data.reminders.find((x) => x.id === id);
+  if (!r) return false;
+  r.done = !!done;
+  commit('reminder:done', { id });
+  return true;
+}
+
+export function deleteReminder(id) {
+  load();
+  const before = data.reminders.length;
+  data.reminders = data.reminders.filter((r) => r.id !== id);
+  if (data.reminders.length === before) return false;
+  commit('reminder:delete', { id });
+  return true;
+}
+
+/**
+ * Reminders whose moment has arrived and that have not been announced yet.
+ * The caller decides how to present them; the store only records the fact.
+ */
+export function getDueReminders(now = new Date()) {
+  load();
+  return clone(data.reminders.filter((r) => !r.done && !r.firedAt
+    && r.at && new Date(r.at).getTime() <= now.getTime()));
+}
+
+/** Record that a reminder was announced, so it never fires twice. */
+export function markReminderFired(id, at = new Date()) {
+  load();
+  const r = data.reminders.find((x) => x.id === id);
+  if (!r) return false;
+  r.firedAt = at.toISOString();
+  commit('reminder:fired', { id });
+  return true;
 }
 
 /* ---------- History & analytics ---------- */
@@ -788,6 +932,13 @@ export default {
   getHomeworks,
   saveHomework,
   deleteHomework,
+  getReminders,
+  getReminder,
+  saveReminder,
+  setReminderDone,
+  deleteReminder,
+  getDueReminders,
+  markReminderFired,
   getNextClass,
   getUpcomingBirthdays,
   getMemberHistory,

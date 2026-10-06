@@ -5,6 +5,26 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] — 2026-10-06
+
+### Added
+
+- **Member avatars.** Members can now have a photo. Images are centre-cropped, downscaled to 160px and re-encoded as JPEG in a canvas before they are stored, so a modern phone photo cannot blow the `localStorage` quota. Without a photo, a coloured circle with the person's initials is shown — the hue is derived from the name, so it is stable and never clashes.
+- **Second phone and address.** Each member can carry a backup number (parent, partner) and an area/address, both shown in the list and validated on save. An identical second number is rejected.
+- **Reminders (new page).** Time-and-place reminders with title, moment, place and note. When the moment arrives the app chimes, vibrates and shows a full-screen notice with an «انجام شد» action — the same feedback path as the door timer. Firing is recorded so a reminder never announces twice, and the scheduler re-checks whenever the tab becomes visible again.
+- **Voice notes on attendance.** A recording can be attached to any attendance entry (round 1). Clips are capped at one minute and stored as a data-URL, with inline playback and delete. `MediaRecorder` availability is detected so the control is simply absent where unsupported.
+- **`src/media.js`**: avatar downscaling, initials/hue generation, the recorder wrapper and duration formatting.
+
+### Changed
+
+- **Schema v2** with a migration that defaults the new member fields, sanitises avatars (only small `data:image/...` URLs are accepted) and rebuilds the reminders list. Existing v1 data upgrades in place.
+- **Bottom navigation now has seven destinations** (یادآور added). Icons and labels were tightened so the bar stays thumb-reachable on a phone.
+- `timer.js` now exports `notify()` so the reminder scheduler can reuse the same notification path.
+
+### Fixed
+
+- Caught by the browser smoke test: `reminders.js` imported `notify` from `timer.js` before it was exported, which threw at module load and took the whole app down (no navigation rendered). The smoke test now covers the reminders and avatar flows end to end.
+
 ## [1.3.0] — 2026-10-06
 
 ### Added

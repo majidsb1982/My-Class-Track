@@ -16,6 +16,7 @@ for (const f of [
   'README.md', 'CHANGELOG.md', 'AGENTS.md', 'PROJECT_REPORT.md',
   'src/styles.css', 'src/jalali.js', 'src/store.js', 'src/ui.js',
   'src/reports.js', 'src/timer.js', 'src/app.js', 'src/prefs.js',
+  'src/media.js', 'src/reminders.js',
   'src/pages/home.js', 'src/pages/attendance.js', 'src/pages/door.js',
   'src/pages/payment.js', 'src/pages/homework.js', 'src/pages/members.js',
   'src/pages/settings.js',
@@ -32,7 +33,7 @@ for (const f of [
 }
 
 console.log('\n2. Module syntax');
-for (const f of ['src/jalali.js', 'src/store.js', 'src/ui.js', 'src/reports.js', 'src/timer.js', 'src/app.js', 'src/prefs.js']) {
+for (const f of ['src/jalali.js', 'src/store.js', 'src/ui.js', 'src/reports.js', 'src/timer.js', 'src/app.js', 'src/prefs.js', 'src/media.js', 'src/reminders.js']) {
   try {
     execFileSync(process.execPath, ['--check', join(ROOT, f)], { stdio: 'pipe' });
     ok(`parses ${f}`);
@@ -58,7 +59,8 @@ else {
 
 console.log('\n4. Every app module is precached');
 const appModules = ['src/app.js', 'src/ui.js', 'src/jalali.js', 'src/store.js',
-  'src/timer.js', 'src/reports.js', 'src/prefs.js', 'src/pages/home.js', 'src/pages/attendance.js',
+  'src/timer.js', 'src/reports.js', 'src/prefs.js', 'src/media.js', 'src/reminders.js',
+  'src/pages/home.js', 'src/pages/attendance.js',
   'src/pages/door.js', 'src/pages/payment.js', 'src/pages/homework.js',
   'src/pages/members.js', 'src/pages/settings.js'];
 for (const m of appModules) {
@@ -154,6 +156,76 @@ try {
     if (trend[0].total !== 3) throw new Error('trend total should count active members: ' + trend[0].total);
     // «ب» has no decision in either session, so it is unrecorded in both.
     if (trend[0].unrecorded !== 1) throw new Error('unrecorded count wrong: ' + trend[0].unrecorded);
+
+    // v1 -> v2 migration: an old member record must gain the new fields
+    // without losing anything, and a bad avatar must be dropped.
+    localStorage.setItem('mct:data', JSON.stringify({
+      version: 1,
+      members: [
+        { id: 'old1', name: 'قدیمی', phone: '09120000009', roles: ['حامی'], birth: { jy: 1370, jm: 5, jd: 10 } },
+        { id: 'old2', name: 'عکس‌دار', phone: '', roles: [], avatar: 'javascript:alert(1)' },
+      ],
+    }));
+    const fresh = await import('./src/store.js?migrate=2');
+    fresh.load();
+    const migrated = fresh.getMembers({ includeInactive: true });
+    if (migrated.length !== 2) throw new Error('migration lost members');
+    const old1 = migrated.find((m) => m.id === 'old1');
+    if (old1.name !== 'قدیمی' || old1.birth.jd !== 10) throw new Error('migration lost fields');
+    if (old1.roles.join() !== 'supporter') throw new Error('migration lost role mapping: ' + old1.roles);
+    if (old1.avatar !== '' || old1.phone2 !== '' || old1.address !== '') {
+      throw new Error('v2 fields not defaulted');
+    }
+    if (fresh.getData().version !== 2) throw new Error('schema version not bumped');
+    // A non-image avatar string must never be stored.
+    const badAvatar = migrated.find((m) => m.id === 'old2');
+    if (badAvatar.avatar !== '') throw new Error('non-image avatar was kept');
+
+    // Second phone: validated, normalised, and rejected when it repeats phone 1.
+    const dup = fresh.saveMember({ name: 'دوتایی', phone: '۰۹۱۲۱۱۱۲۲۳۳', phone2: '09121112233' });
+    if (dup.ok) throw new Error('identical second phone accepted');
+    if (!dup.errors.phone2) throw new Error('missing phone2 error');
+    const ok2 = fresh.saveMember({ name: 'دو شماره', phone: '۰۹۱۲۱۱۱۲۲۳۳', phone2: '۰۲۱۸۸۸۸۹۹۹۹' });
+    if (!ok2.ok) throw new Error('valid second phone rejected: ' + JSON.stringify(ok2.errors));
+    const two = fresh.getMember(ok2.id);
+    if (two.phone2 !== '02188889999') throw new Error('phone2 not normalised: ' + two.phone2);
+
+    // Reminders: CRUD, due detection and fire-once behaviour.
+    const soon = new Date(Date.now() + 60000).toISOString();
+    const past = new Date(Date.now() - 60000).toISOString();
+    const rem = fresh.saveReminder({ title: 'واریز شهریه', at: past, place: 'کلینیک' });
+    if (!rem.ok) throw new Error('reminder save failed: ' + JSON.stringify(rem.errors));
+    const badRem = fresh.saveReminder({ title: '', at: 'not-a-date' });
+    if (badRem.ok) throw new Error('invalid reminder accepted');
+    fresh.saveReminder({ title: 'بعداً', at: soon });
+
+    if (fresh.getReminders().length !== 2) throw new Error('reminder list wrong');
+    const due = fresh.getDueReminders();
+    if (due.length !== 1 || due[0].title !== 'واریز شهریه') throw new Error('due detection wrong: ' + due.length);
+    if (due[0].place !== 'کلینیک') throw new Error('reminder place lost');
+
+    // Firing must be recorded so it never announces twice.
+    fresh.markReminderFired(due[0].id);
+    if (fresh.getDueReminders().length !== 0) throw new Error('reminder fired twice');
+
+    fresh.setReminderDone(rem.id, true);
+    if (fresh.getReminders().some((r) => r.id === rem.id)) throw new Error('done reminder still active');
+    if (fresh.getReminders({ includeDone: true }).length !== 2) throw new Error('done reminder missing');
+
+    // Voice notes: a data-URL is kept with its duration, junk is ignored.
+    const vs = fresh.ensureSession(1404, 2, 3);
+    fresh.setAttendance(vs.id, 1, ok2.id, {
+      status: 'absent',
+      voice: 'data:audio/webm;base64,AAAA',
+      voiceMs: 4200,
+    });
+    const withVoice = fresh.getSession(vs.id).slots['1'][ok2.id];
+    if (!withVoice.voice) throw new Error('voice note not stored');
+    if (withVoice.voiceMs !== 4200) throw new Error('voice duration lost');
+
+    fresh.setAttendance(vs.id, 1, two.id, { status: 'absent', voice: 'not-audio' });
+    const noVoice = fresh.getSession(vs.id).slots['1'][two.id];
+    if (noVoice.voice) throw new Error('non-audio voice value was stored');
 
     console.log('ok');
   `;

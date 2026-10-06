@@ -129,7 +129,7 @@ export async function requestNotificationPermission() {
   }
 }
 
-function notify(title, body) {
+export function notify(title, body) {
   if (!notificationsSupported() || Notification.permission !== 'granted') return;
   try {
     // eslint-disable-next-line no-new
@@ -445,6 +445,7 @@ export default {
   alarmPhrase,
   playChime,
   vibrate,
+  notify,
   notificationsSupported,
   notificationPermission,
   requestNotificationPermission,
