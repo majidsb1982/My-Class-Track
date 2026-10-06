@@ -147,16 +147,18 @@ function renderPaymentRow(member, record, session, date, urgent, options) {
     el('button', {
       type: 'button',
       class: `btn btn--sm ${paid ? 'btn--secondary' : 'btn--primary'}`,
-      onclick: () => {
-        if (paid) {
+      onclick: () => openPaymentForm(member, session, date, options),
+    }, paid ? 'ویرایش' : 'ثبت پرداخت'),
+    paid
+      ? el('button', {
+        type: 'button', class: 'btn btn--ghost btn--sm',
+        onclick: () => {
           savePayment({ sessionId: session.id, memberId: member.id, paid: false });
           toast('پرداخت لغو شد.', 'info');
           rerender({ ...options, date });
-        } else {
-          openPaymentForm(member, session, date, options);
-        }
-      },
-    }, paid ? 'ویرایش' : 'ثبت پرداخت'),
+        },
+      }, 'لغو پرداخت')
+      : null,
   ]);
   card.append(actions);
 

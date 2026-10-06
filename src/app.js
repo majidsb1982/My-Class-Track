@@ -17,6 +17,7 @@ import { renderPayment } from './pages/payment.js';
 import { renderHomework } from './pages/homework.js';
 import { renderHome } from './pages/home.js';
 import { renderReminders, startReminderScheduler } from './reminders.js';
+import { renderEvents } from './pages/events.js';
 
 /* ---------- Routes ---------- */
 
@@ -25,6 +26,7 @@ const ROUTES = [
   { id: 'attendance', label: 'حضور', icon: 'attendance', title: 'حضور', subtitle: 'پیگیری حضور در دو نوبت' },
   { id: 'payment', label: 'شهریه', icon: 'payment', title: 'شهریه', subtitle: 'وضعیت پرداخت هر جلسه' },
   { id: 'homework', label: 'تکالیف', icon: 'homework', title: 'تکالیف', subtitle: 'تکلیف هر هفته و آرشیو' },
+  { id: 'events', label: 'برنامه‌ها', icon: 'calendar', title: 'برنامه‌ها', subtitle: 'سمینار، گردهمایی و جشن' },
   { id: 'reminders', label: 'یادآور', icon: 'bell', title: 'یادآورها', subtitle: 'یادآور زمان و مکان' },
   { id: 'members', label: 'اعضا', icon: 'members', title: 'اعضا', subtitle: 'فهرست اعضا و نقش‌ها' },
   { id: 'settings', label: 'تنظیمات', icon: 'settings', title: 'تنظیمات', subtitle: 'کلاس، تم و پشتیبان‌گیری' },
@@ -45,6 +47,7 @@ const PAGES = {
   payment: (container, ctx) => renderPayment(container, ctx),
   homework: (container, ctx) => renderHomework(container, ctx),
   reminders: (container) => renderReminders(container),
+  events: (container) => renderEvents(container),
 };
 
 /* ---------- Theme & preferences ---------- */

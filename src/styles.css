@@ -265,9 +265,9 @@ a:hover { text-decoration: underline; }
 }
 .bottom-nav__list {
   display: grid;
-  /* Seven destinations: they must stay thumb-reachable, so the icons shrink
-     slightly rather than the bar growing taller. */
-  grid-template-columns: repeat(7, 1fr);
+  /* Eight destinations is a lot for a phone: the icons and labels shrink so
+     the bar keeps its height and every target stays thumb-reachable. */
+  grid-template-columns: repeat(8, 1fr);
   max-width: var(--content-max);
   margin: 0 auto;
   height: var(--nav-height);
@@ -281,10 +281,11 @@ a:hover { text-decoration: underline; }
   align-items: center;
   justify-content: center;
   gap: 2px;
-  min-width: var(--touch-min);
+  min-width: 0;
   min-height: var(--touch-min);
+  padding: 0 2px;
   color: var(--color-text-muted);
-  font-size: 0.62rem;
+  font-size: 0.56rem;
   font-weight: 600;
   border: none;
   background: none;
@@ -292,7 +293,14 @@ a:hover { text-decoration: underline; }
   transition: color var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
   position: relative;
 }
-.nav-link .icon-slot { width: 22px; height: 22px; }
+.nav-link .icon-slot { width: 21px; height: 21px; }
+/* Long labels («برنامه‌ها») must not widen their column. */
+.nav-link span:not(.icon-slot) {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .nav-link:active { transform: scale(0.94); }
 .nav-link:hover { color: var(--color-text); }
 .nav-link[aria-current="page"] { color: var(--color-primary); }
@@ -723,6 +731,59 @@ a:hover { text-decoration: underline; }
   margin-bottom: var(--space-3);
 }
 .datepicker__label { font-weight: 800; font-size: 0.95rem; }
+
+/* Month + year selects sit between the arrows. */
+.datepicker__selects {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 0;
+}
+.datepicker__select {
+  flex: 1;
+  min-width: 0;
+  height: 38px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+.datepicker__select--year { flex: 0 0 92px; }
+
+/* Decade jump row — cheaper than opening the year list for a distant date. */
+.datepicker__jumps {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+.datepicker__jump {
+  padding: 2px var(--space-3);
+  min-height: 28px;
+  border-radius: var(--radius-pill);
+  border: 1px dashed var(--color-border);
+  background: none;
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.datepicker__jump:hover {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+}
+
+.datepicker__hint {
+  margin-top: var(--space-2);
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+  text-align: center;
+}
 .datepicker__nav {
   display: grid;
   place-items: center;
@@ -1435,4 +1496,89 @@ a:hover { text-decoration: underline; }
   .reminder-overlay,
   .reminder-overlay__card,
   .recording-indicator__dot { animation: none; }
+}
+
+/* ============================================================
+   Events — seminars, gatherings, celebrations
+   ============================================================ */
+
+.filter-chips {
+  display: flex;
+  gap: var(--space-2);
+  overflow-x: auto;
+  padding-bottom: var(--space-2);
+  scrollbar-width: none;
+}
+.filter-chips::-webkit-scrollbar { display: none; }
+
+.filter-chip {
+  flex: none;
+  min-height: 36px;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.filter-chip.is-active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.event-card {
+  display: block;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  margin-bottom: var(--space-3);
+  border-inline-start: 4px solid var(--color-primary);
+}
+.event-card.is-past {
+  opacity: 0.7;
+  border-inline-start-color: var(--color-border);
+}
+
+.event-card__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.event-type {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 3px var(--space-3);
+  border-radius: var(--radius-pill);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+.event-type--primary { background: var(--color-primary-soft); color: var(--color-primary); }
+.event-type--success { background: var(--color-success-soft); color: var(--color-success); }
+.event-type--warning { background: var(--color-warning-soft); color: var(--color-warning); }
+.event-type--problem { background: var(--color-problem-soft); color: var(--color-problem); }
+
+.event-card__title { font-weight: 800; font-size: 1.05rem; }
+.event-card__meta { color: var(--color-text-muted); font-size: 0.86rem; margin-top: 2px; }
+.event-card__note {
+  margin-top: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+  white-space: pre-wrap;
+}
+
+/* Two fields side by side (time ranges, and similar pairs). */
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
 }

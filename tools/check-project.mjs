@@ -20,6 +20,7 @@ for (const f of [
   'src/pages/home.js', 'src/pages/attendance.js', 'src/pages/door.js',
   'src/pages/payment.js', 'src/pages/homework.js', 'src/pages/members.js',
   'src/pages/settings.js',
+  'src/pages/events.js',
   'src/prefs.js',
   'LICENSE', 'CONTRIBUTING.md', 'SECURITY.md',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png',
@@ -62,7 +63,7 @@ const appModules = ['src/app.js', 'src/ui.js', 'src/jalali.js', 'src/store.js',
   'src/timer.js', 'src/reports.js', 'src/prefs.js', 'src/media.js', 'src/reminders.js',
   'src/pages/home.js', 'src/pages/attendance.js',
   'src/pages/door.js', 'src/pages/payment.js', 'src/pages/homework.js',
-  'src/pages/members.js', 'src/pages/settings.js'];
+  'src/pages/members.js', 'src/pages/settings.js', 'src/pages/events.js'];
 for (const m of appModules) {
   if (entries.some((e) => e.replace(/^\.\//, '') === m)) ok(m);
   else bad(`${m} not precached`);
@@ -176,7 +177,7 @@ try {
     if (old1.avatar !== '' || old1.phone2 !== '' || old1.address !== '') {
       throw new Error('v2 fields not defaulted');
     }
-    if (fresh.getData().version !== 2) throw new Error('schema version not bumped');
+    if (fresh.getData().version !== 3) throw new Error('schema version not bumped');
     // A non-image avatar string must never be stored.
     const badAvatar = migrated.find((m) => m.id === 'old2');
     if (badAvatar.avatar !== '') throw new Error('non-image avatar was kept');
@@ -226,6 +227,72 @@ try {
     fresh.setAttendance(vs.id, 1, two.id, { status: 'absent', voice: 'not-audio' });
     const noVoice = fresh.getSession(vs.id).slots['1'][two.id];
     if (noVoice.voice) throw new Error('non-audio voice value was stored');
+
+    // Events (v3): types, ordering, upcoming window and validation.
+    if (!fresh.EVENT_TYPE_KEYS.includes('seminar')) throw new Error('seminar type missing');
+    if (!fresh.EVENT_TYPE_KEYS.includes('celebration')) throw new Error('celebration type missing');
+
+    const today = fresh.todayJalali();
+    const jal = await import('./src/jalali.js');
+    const soonDate = jal.addJalaliDays(today, 3);
+    const farDate = jal.addJalaliDays(today, 90);
+
+    const seminar = fresh.saveEvent({
+      type: 'seminar', title: 'سمینار مهارت‌های ارتباطی',
+      jy: soonDate.jy, jm: soonDate.jm, jd: soonDate.jd,
+      start: '17:00', end: '19:00', place: 'سالن اصلی',
+    });
+    if (!seminar.ok) throw new Error('event save failed: ' + JSON.stringify(seminar.errors));
+
+    fresh.saveEvent({
+      type: 'celebration', title: 'جشن پایان دوره',
+      jy: farDate.jy, jm: farDate.jm, jd: farDate.jd,
+    });
+
+    // Validation must reject the obvious mistakes.
+    if (fresh.saveEvent({ type: 'seminar', title: '', jy: today.jy, jm: today.jm, jd: today.jd }).ok) {
+      throw new Error('event without a title accepted');
+    }
+    if (fresh.saveEvent({ type: 'nope', title: 'x', jy: today.jy, jm: today.jm, jd: today.jd }).ok) {
+      throw new Error('unknown event type accepted');
+    }
+    if (fresh.saveEvent({ type: 'seminar', title: 'x', jy: 1402, jm: 12, jd: 30 }).ok) {
+      throw new Error('impossible event date accepted');
+    }
+    const badTimes = fresh.saveEvent({
+      type: 'seminar', title: 'x', jy: today.jy, jm: today.jm, jd: today.jd,
+      start: '19:00', end: '18:00',
+    });
+    if (badTimes.ok || !badTimes.errors.end) throw new Error('reversed event times accepted');
+
+    if (fresh.getEvents().length !== 2) throw new Error('event list wrong');
+    if (fresh.getEvents({ type: 'celebration' }).length !== 1) throw new Error('event type filter wrong');
+
+    // The upcoming window must include the near event and exclude the far one.
+    const upcoming = fresh.getUpcomingEvents(30);
+    if (upcoming.length !== 1 || upcoming[0].title !== 'سمینار مهارت‌های ارتباطی') {
+      throw new Error('upcoming window wrong: ' + JSON.stringify(upcoming.map((e) => e.title)));
+    }
+    if (upcoming[0].daysLeft !== 3) throw new Error('daysLeft wrong: ' + upcoming[0].daysLeft);
+    if (upcoming[0].place !== 'سالن اصلی') throw new Error('event place lost');
+
+    // Editing an event keeps its id and does not create a duplicate.
+    const edited = fresh.saveEvent({ ...upcoming[0], title: 'سمینار ویرایش‌شده' });
+    if (!edited.ok) throw new Error('event edit failed');
+    const afterEdit = fresh.getEvent(edited.id);
+    if (afterEdit.title !== 'سمینار ویرایش‌شده') throw new Error('event title not updated');
+    if (fresh.getEvents().length !== 2) throw new Error('event edit created a duplicate');
+
+    // A malformed event in a backup is dropped, not rendered half-broken.
+    const withJunk = fresh.exportData();
+    withJunk.events.push({ id: 'junk', type: 'seminar', title: 'بی‌تاریخ' });
+    withJunk.events.push({ id: 'junk2', type: 'seminar', title: 'تاریخ غلط', jy: 1402, jm: 12, jd: 30 });
+    const reimported = fresh.importData(withJunk);
+    if (!reimported.ok) throw new Error('import with junk events failed');
+    if (fresh.getEvents().length !== 2) throw new Error('junk events survived import');
+
+    if (!fresh.deleteEvent(edited.id)) throw new Error('event delete failed');
+    if (fresh.getEvents().length !== 1) throw new Error('event not removed');
 
     console.log('ok');
   `;

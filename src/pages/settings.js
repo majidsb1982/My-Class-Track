@@ -11,7 +11,7 @@ import { WEEKDAY_NAMES, toPersianDigits, formatTime, formatJalali, todayJalali }
 import { getTheme, getFontSize, setPrefs, applyTheme, applyFontSize } from '../prefs.js';
 import { paymentsCsv, downloadCsv, openReport, fileStamp } from '../reports.js';
 
-const APP_VERSION = 'v1.4.0';
+const APP_VERSION = 'v1.5.0';
 
 /** Render the settings page into the given container. */
 export function renderSettings(container) {

@@ -10,7 +10,7 @@ import {
 /* ---------- Config ---------- */
 
 const ROOT_KEY = 'mct:data';
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 /** Application roles a member can hold. */
 export const ROLES = {
@@ -21,6 +21,21 @@ export const ROLES = {
 };
 
 export const ROLE_KEYS = Object.keys(ROLES);
+
+/**
+ * Kinds of gathering the class organises. Each carries its own icon and badge
+ * tone so an event is recognisable at a glance in a list.
+ */
+export const EVENT_TYPES = {
+  seminar: { label: 'سمینار', icon: '🎓', tone: 'primary' },
+  gathering: { label: 'گردهمایی', icon: '🤝', tone: 'success' },
+  celebration: { label: 'جشن', icon: '🎉', tone: 'warning' },
+  workshop: { label: 'کارگاه', icon: '🛠️', tone: 'problem' },
+  trip: { label: 'اردو', icon: '🚌', tone: 'primary' },
+  meeting: { label: 'جلسه فوق‌برنامه', icon: '📌', tone: 'success' },
+};
+
+export const EVENT_TYPE_KEYS = Object.keys(EVENT_TYPES);
 
 /* ---------- Default schema ---------- */
 
@@ -34,6 +49,7 @@ function createDefaultData() {
     classSchedule: [],  // { id, weekday:0..6 (0=Sat), start:"19:00", end:"21:00" }
     periods: [],        // archived role assignments: { id, startedAt, endedAt, members:[{id,name,roles}] }
     reminders: [],      // { id, title, at, place, note, done, firedAt }
+    events: [],         // { id, type, title, jy,jm,jd, start, end, place, note }
     meta: { createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
   };
 }
@@ -64,7 +80,7 @@ function migrate(input) {
   out.version = SCHEMA_VERSION;
 
   // Ensure array fields are arrays.
-  for (const key of ['members', 'sessions', 'payments', 'homeworks', 'classSchedule', 'periods', 'reminders']) {
+  for (const key of ['members', 'sessions', 'payments', 'homeworks', 'classSchedule', 'periods', 'reminders', 'events']) {
     if (!Array.isArray(out[key])) out[key] = [];
   }
 
@@ -95,6 +111,22 @@ function migrate(input) {
     done: r.done === true,
     firedAt: typeof r.firedAt === 'string' ? r.firedAt : '',
   })).filter((r) => r.title && r.at);
+
+  // Events (v2 -> v3). An event without a valid Jalali date is dropped rather
+  // than kept as a half-rendered card.
+  out.events = out.events.map((e) => ({
+    id: e.id || makeId('e'),
+    type: EVENT_TYPE_KEYS.includes(e.type) ? e.type : 'gathering',
+    title: typeof e.title === 'string' ? e.title : '',
+    jy: Number(e.jy), jm: Number(e.jm), jd: Number(e.jd),
+    start: typeof e.start === 'string' ? e.start : '',
+    end: typeof e.end === 'string' ? e.end : '',
+    place: typeof e.place === 'string' ? e.place : '',
+    note: typeof e.note === 'string' ? e.note : '',
+    createdAt: e.createdAt || new Date().toISOString(),
+  })).filter((e) => e.title && Number.isInteger(e.jy) && Number.isInteger(e.jm)
+    && Number.isInteger(e.jd) && e.jm >= 1 && e.jm <= 12 && e.jd >= 1
+    && e.jd <= jalaliMonthLength(e.jy, e.jm));
 
   out.meta = { ...base.meta, ...(input.meta || {}) };
   return out;
@@ -591,6 +623,95 @@ export function getUpcomingBirthdays(days = 7, from = new Date()) {
   return out.sort((a, b) => a.daysLeft - b.daysLeft);
 }
 
+/* ---------- Events (seminars, gatherings, celebrations) ---------- */
+
+/**
+ * List events, soonest first. Past events are included so the archive works.
+ * @param {{type?: string}} [options]
+ */
+export function getEvents({ type = '' } = {}) {
+  load();
+  const list = type ? data.events.filter((e) => e.type === type) : data.events;
+  return clone([...list].sort((a, b) => (a.jy - b.jy) || (a.jm - b.jm) || (a.jd - b.jd)));
+}
+
+export function getEvent(id) {
+  load();
+  const e = data.events.find((x) => x.id === id);
+  return e ? clone(e) : null;
+}
+
+/**
+ * Upcoming events within `days` days (today included), soonest first.
+ * Used by the home dashboard.
+ */
+export function getUpcomingEvents(days = 30, from = new Date()) {
+  load();
+  const todayJ = toJalali(from);
+  return clone(data.events
+    .map((e) => ({ ...e, daysLeft: jalaliDiffDays({ jy: e.jy, jm: e.jm, jd: e.jd }, todayJ) }))
+    .filter((e) => e.daysLeft >= 0 && e.daysLeft <= days)
+    .sort((a, b) => a.daysLeft - b.daysLeft));
+}
+
+/**
+ * Create or update an event.
+ * @param {Object} input { id?, type, title, jy, jm, jd, start, end, place, note }
+ * @returns {{ok:boolean, id?:string, errors?:Object}}
+ */
+export function saveEvent(input) {
+  load();
+  const errors = {};
+
+  const title = String(input?.title || '').trim();
+  if (!title) errors.title = 'عنوان برنامه را وارد کنید.';
+  else if (title.length > 120) errors.title = 'عنوان بیش از حد طولانی است.';
+
+  if (!EVENT_TYPE_KEYS.includes(input?.type)) errors.type = 'نوع برنامه را انتخاب کنید.';
+
+  const { jy, jm, jd } = input || {};
+  if (!Number.isInteger(jy) || !Number.isInteger(jm) || !Number.isInteger(jd)
+    || jm < 1 || jm > 12 || jd < 1 || jd > jalaliMonthLength(jy, jm)) {
+    errors.date = 'تاریخ برنامه معتبر نیست.';
+  }
+
+  const start = String(input?.start || '').trim();
+  const end = String(input?.end || '').trim();
+  if (start && !isTime(start)) errors.start = 'ساعت شروع معتبر نیست.';
+  if (end && !isTime(end)) errors.end = 'ساعت پایان معتبر نیست.';
+  if (!errors.start && !errors.end && start && end && timeToMinutes(end) <= timeToMinutes(start)) {
+    errors.end = 'ساعت پایان باید بعد از شروع باشد.';
+  }
+
+  if (Object.keys(errors).length) return { ok: false, errors };
+
+  const item = {
+    id: input.id || makeId('e'),
+    type: input.type,
+    title,
+    jy, jm, jd,
+    start: start || '',
+    end: end || '',
+    place: String(input.place || '').trim(),
+    note: String(input.note || '').trim(),
+    createdAt: input.createdAt || new Date().toISOString(),
+  };
+  const idx = data.events.findIndex((e) => e.id === item.id);
+  if (idx === -1) data.events.push(item);
+  else data.events[idx] = item;
+  commit('event:save', { id: item.id });
+  return { ok: true, id: item.id };
+}
+
+export function deleteEvent(id) {
+  load();
+  const before = data.events.length;
+  data.events = data.events.filter((e) => e.id !== id);
+  if (data.events.length === before) return false;
+  commit('event:delete', { id });
+  return true;
+}
+
 /* ---------- Reminders ---------- */
 
 /**
@@ -939,6 +1060,13 @@ export default {
   deleteReminder,
   getDueReminders,
   markReminderFired,
+  EVENT_TYPES,
+  EVENT_TYPE_KEYS,
+  getEvents,
+  getEvent,
+  getUpcomingEvents,
+  saveEvent,
+  deleteEvent,
   getNextClass,
   getUpcomingBirthdays,
   getMemberHistory,

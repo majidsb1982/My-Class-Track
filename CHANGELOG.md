@@ -5,6 +5,24 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] — 2026-10-06
+
+### Added
+
+- **Professional Jalali date picker.** The header now carries a **month dropdown and a year dropdown** (a 25-year range) plus **±10-year jump buttons**, so a date years away is two taps instead of twenty. The day grid is fully keyboard-navigable: arrows move a day or a week, PageUp/PageDown a month, Home/End to the month's ends, Enter/Space to pick. Days are rendered with Persian digits and the grid exposes `role="gridcell"` with `aria-selected`.
+- **Programmes page (برنامه‌ها).** Seminars, gatherings, celebrations, workshops, trips and extra sessions, each with a title, Jalali date, optional time window, place and notes. Filterable by type with chips; upcoming events are listed first and past ones collapse into an archive. The home dashboard gained a «برنامه‌های پیش رو» card showing the next 30 days with a day countdown.
+- **`EVENT_TYPES`** in the store, so a new kind of gathering is one entry away.
+
+### Changed
+
+- **Schema v3** adds the `events` array. Migration drops events with a missing title, an unknown type or an impossible Jalali date, so a corrupt backup cannot produce half-rendered cards.
+- **Edit affordances** where they were missing: the attendance page can move the current session to another date (blocked with a clear message when that date already holds attendance), and a paid tuition row now has a separate «لغو پرداخت» action next to «ویرایش» instead of overloading one button.
+- The bottom navigation now has **eight destinations**. Labels are ellipsised and icons tightened so the bar keeps its height and every target stays thumb-reachable.
+
+### Fixed
+
+- Caught by the browser smoke test: `renderPopup` in `ui.js` called `toPersianDigits` without importing it, which threw on every picker open — the calendar would not render at all. The smoke test now asserts the year selector exists, has a usable range, and that an event can be created and edited in place.
+
 ## [1.4.0] — 2026-10-06
 
 ### Added

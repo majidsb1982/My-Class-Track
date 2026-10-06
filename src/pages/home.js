@@ -7,7 +7,7 @@
 import { el, icon, pageHead, emptyState } from '../ui.js';
 import {
   getMembers, getNextClass, getUpcomingBirthdays, ensureSession,
-  attendanceProgress, getPayments,
+  attendanceProgress, getPayments, getUpcomingEvents, EVENT_TYPES,
 } from '../store.js';
 import {
   todayJalali, formatJalali, jalaliWeekdayName, toPersianDigits, toGregorian,
@@ -42,6 +42,7 @@ export function renderHome(container, options = {}) {
     ]));
     // Birthdays, the summary and the shortcuts are still useful without a
     // schedule, so they must not be skipped on this branch.
+    container.append(renderEvents());
     container.append(renderBirthdays());
     container.append(renderSummary(null));
     container.append(renderShortcuts(navigate));
@@ -49,6 +50,7 @@ export function renderHome(container, options = {}) {
   }
 
   container.append(renderNextClass(next));
+  container.append(renderEvents());
   container.append(renderBirthdays());
   container.append(renderSummary(next));
   container.append(renderShortcuts(navigate));
@@ -142,6 +144,42 @@ function countdownText(ms) {
   parts.push(`${toPersianDigits(minutes)} دقیقه`);
 
   return `${parts.join(' و ')} مانده`;
+}
+
+/* ---------- Upcoming events ---------- */
+
+/**
+ * The next 30 days of seminars, gatherings and celebrations. Returns an empty
+ * node when there is nothing scheduled, so the dashboard stays uncluttered.
+ */
+function renderEvents() {
+  const upcoming = getUpcomingEvents(30);
+  if (!upcoming.length) return el('div', {});
+
+  const card = el('section', { class: 'card' }, [
+    el('h3', { class: 'card__title' }, [icon('calendar'), 'برنامه‌های پیش رو']),
+  ]);
+
+  const list = el('ul', { class: 'list' });
+  upcoming.slice(0, 4).forEach((e) => {
+    const meta = EVENT_TYPES[e.type] || EVENT_TYPES.gathering;
+    const bits = [];
+    if (e.start) bits.push(`ساعت ${toPersianDigits(e.start)}`);
+    if (e.place) bits.push(e.place);
+
+    list.append(el('li', { class: 'list-item' }, [
+      el('span', { class: `event-type event-type--${meta.tone}` }, meta.icon),
+      el('div', { class: 'list-item__body' }, [
+        el('div', { class: 'list-item__title' }, e.title),
+        el('div', { class: 'list-item__meta' },
+          `${jalaliWeekdayName(e.jy, e.jm, e.jd)} ${formatJalali(e.jy, e.jm, e.jd)}${bits.length ? ` • ${bits.join(' • ')}` : ''}`),
+      ]),
+      el('span', { class: `badge badge--${e.daysLeft <= 2 ? 'danger' : 'primary'}` },
+        e.daysLeft === 0 ? 'امروز!' : e.daysLeft === 1 ? 'فردا' : `${toPersianDigits(e.daysLeft)} روز`),
+    ]));
+  });
+  card.append(list);
+  return card;
 }
 
 /* ---------- Birthdays ---------- */

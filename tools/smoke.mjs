@@ -147,24 +147,28 @@ await page.evaluate(() =>
 await page.waitForSelector(".dialog--form", { timeout: 5000 });
 await page.fill('.dialog--form input[type="text"]', "علی تستی");
 await page.fill('.dialog--form input[type="tel"]', "۰۹۱۲۳۴۵۶۷۸۹");
-// Open the Jalali picker, walk back to Farvardin (always 31 days), then pick 31.
-await page.click(".dialog--form .date-trigger");
-await page.waitForSelector(".datepicker__grid", { timeout: 5000 });
-for (let i = 0; i < 24; i += 1) {
-  const label = await page.locator(".datepicker__label").innerText();
-  if (label.includes("فروردین")) break;
-  await page.click('.datepicker__nav[aria-label="ماه قبل"]');
-  await wait(60);
-}
-const monthLabel = await page.locator(".datepicker__label").innerText();
+// Open the Jalali picker and select Farvardin (always 31 days) via the month
+// dropdown, then pick day 31. This also exercises the new year/month selectors.
+await page.click('.dialog--form .date-trigger');
+await page.waitForSelector('.datepicker__grid', { timeout: 5000 });
+
+const hasYearSelect = await page.locator('.datepicker__select--year').count();
+check('picker exposes a year selector', hasYearSelect === 1, String(hasYearSelect));
+const yearOptionCount = await page.locator('.datepicker__select--year option').count();
+check('year selector has a usable range', yearOptionCount > 10, `${yearOptionCount} years`);
+
+await page.selectOption('.datepicker__select:not(.datepicker__select--year)', '1');
+await wait(150);
+const monthLabel = await page.locator('.datepicker__select:not(.datepicker__select--year) option:checked').innerText();
+
 const dayClicked = await page.evaluate(() => {
-  const btns = [...document.querySelectorAll(".datepicker__day")];
-  const b = btns.find((x) => x.textContent.trim() === "31");
+  const btns = [...document.querySelectorAll('.datepicker__day')];
+  const b = btns.find((x) => x.textContent.trim() === '۳۱');
   if (!b) return false;
   b.click();
   return true;
 });
-check("picker offers day 31 in Farvardin", dayClicked, monthLabel);
+check('picker offers day 31 in Farvardin', dayClicked, monthLabel);
 await page.evaluate(() =>
   [...document.querySelectorAll(".dialog__actions button")]
     .find((b) => b.type === "submit")
@@ -234,7 +238,7 @@ const offlineTitle = await page
   .catch(() => "");
 check(
   "app loads offline from cache",
-  offlineOk === 7 && !!offlineTitle,
+  offlineOk === 8 && !!offlineTitle,
   `${offlineOk} nav links, "${offlineTitle}"`,
 );
 await ctx.setOffline(false);
@@ -363,6 +367,66 @@ check("member list renders an avatar", !!avatarHue && avatarHue.initials.length 
   JSON.stringify(avatarHue));
 
 check("no console errors after new features", errors.length === 0, errors.slice(0, 3).join(" | "));
+
+// 9. Events: create a seminar and confirm it is persisted and rendered.
+await page.evaluate(() => localStorage.removeItem("mct:data"));
+await page.goto(BASE, { waitUntil: "domcontentloaded" });
+await page.waitForSelector(".nav-link", { timeout: 15000 });
+await page.click('.nav-link[data-route="events"]');
+await page.waitForSelector(".page-title", { timeout: 5000 });
+const eventEmpty = await page.locator(".empty-state").count();
+check("events page shows empty state", eventEmpty === 1, String(eventEmpty));
+
+await page.locator(".empty-state button").first().click();
+await page.waitForSelector(".dialog--form", { timeout: 5000 });
+await page.fill('.dialog--form input[type="text"]', "سمینار تستی");
+
+// The date is required: the picker lives inside the form.
+await page.click('.dialog--form .date-trigger');
+await page.waitForSelector('.datepicker__grid', { timeout: 5000 });
+await page.locator('.datepicker__day:not(.datepicker__day--muted)').first().click();
+await wait(200);
+
+await page.evaluate(() =>
+  [...document.querySelectorAll(".dialog__actions button")]
+    .find((b) => b.type === "submit")
+    .click(),
+);
+await wait(500);
+const eventState = await page.evaluate(() => {
+  const d = JSON.parse(localStorage.getItem("mct:data") || "null");
+  const e = d?.events?.[0];
+  return { count: d?.events?.length, title: e?.title, type: e?.type, hasDate: !!e?.jy };
+});
+check("event persisted with a type and date",
+  eventState.count === 1 && eventState.type === "seminar" && eventState.hasDate,
+  JSON.stringify(eventState));
+const eventCards = await page.locator(".event-card").count();
+check("event rendered as a card", eventCards === 1, String(eventCards));
+
+// Editing must update in place, not add a second event.
+await page.evaluate(() => {
+  const card = document.querySelector(".event-card");
+  const btn = [...card.querySelectorAll("button")].find((b) => b.textContent.includes("ویرایش"));
+  btn.click();
+});
+await page.waitForSelector(".dialog--form", { timeout: 5000 });
+await page.fill('.dialog--form input[type="text"]', "سمینار ویرایش‌شده");
+await page.evaluate(() =>
+  [...document.querySelectorAll(".dialog__actions button")]
+    .find((b) => b.type === "submit")
+    .click(),
+);
+await wait(500);
+const afterEventEdit = await page.evaluate(() => {
+  const d = JSON.parse(localStorage.getItem("mct:data") || "null");
+  return { count: d?.events?.length, title: d?.events?.[0]?.title };
+});
+check("event edit updates in place",
+  afterEventEdit.count === 1 && afterEventEdit.title === "سمینار ویرایش‌شده",
+  JSON.stringify(afterEventEdit));
+
+check("no console errors after events", errors.length === 0, errors.slice(0, 3).join(" | "));
 
 const failed = results.filter((r) => !r.pass);
 console.log(

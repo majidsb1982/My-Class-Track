@@ -8,11 +8,12 @@ import {
   el, icon, toast, pageHead, emptyState, formModal,
 } from '../ui.js';
 import { canRecord, createRecorder, formatDuration, avatarNode } from '../media.js';
+import { createJalaliDatePicker } from '../ui.js';
 import {
   ATTENDANCE_STATUS, STATUS_KEYS,
   getMembers, getSessions, ensureSession, getSession,
   setAttendance, attendanceProgress,
-  getNextClass, getAttendanceTrend,
+  getNextClass, getAttendanceTrend, findSessionByDate,
 } from '../store.js';
 import { todayJalali, formatJalali, jalaliWeekdayName, toPersianDigits, toGregorian } from '../jalali.js';
 import { renderDoorMode } from './door.js';
@@ -58,10 +59,16 @@ export function renderAttendance(container, options = {}) {
         el('div', { class: 'session-label' }, sessionLabel(date)),
         el('div', { class: 'muted' }, `${toPersianDigits(members.length)} عضو فعال`),
       ]),
-      el('button', {
-        type: 'button', class: 'btn btn--ghost btn--sm',
-        onclick: () => openSessionPicker(container, date, options),
-      }, 'تغییر جلسه'),
+      el('div', { class: 'btn-row' }, [
+        el('button', {
+          type: 'button', class: 'btn btn--ghost btn--sm',
+          onclick: () => openSessionPicker(container, date, options),
+        }, 'تغییر جلسه'),
+        el('button', {
+          type: 'button', class: 'btn btn--ghost btn--sm',
+          onclick: () => openSessionDateEditor(date, options),
+        }, [icon('calendar'), 'تاریخ جلسه']),
+      ]),
     ]),
   ]));
 
@@ -393,6 +400,66 @@ function renderVoiceNote(session, slot, member, rec) {
 
   render(rec);
   return wrap;
+}
+
+/* ---------- Session date editor ---------- */
+
+/**
+ * Move the session being worked on to another Jalali date.
+ *
+ * Attendance is keyed by date, so this is a real move: any records already
+ * entered for the new date would be merged, which is why the user is warned
+ * when the target date already holds data.
+ */
+function openSessionDateEditor(currentDate, options) {
+  const picker = createJalaliDatePicker({
+    value: { ...currentDate },
+    placeholder: 'انتخاب تاریخ جلسه',
+    allowClear: false,
+  });
+
+  const errorEl = el('span', { class: 'field__error', role: 'alert' });
+  errorEl.hidden = true;
+
+  formModal({
+    title: 'تاریخ جلسه',
+    body: el('div', {}, [
+      el('p', { class: 'muted' }, 'جلسه‌ای که روی آن کار می‌کنید به این تاریخ منتقل می‌شود.'),
+      el('div', { class: 'field mt-3' }, [
+        el('span', { class: 'field__label' }, 'تاریخ جلسه'),
+        picker.root,
+        errorEl,
+      ]),
+    ]),
+    submitLabel: 'انتقال',
+    onSubmit: () => {
+      errorEl.hidden = true;
+      const next = picker.getValue();
+      if (!next) {
+        errorEl.textContent = 'یک تاریخ انتخاب کنید.';
+        errorEl.hidden = false;
+        return { date: 'missing' };
+      }
+      if (next.jy === currentDate.jy && next.jm === currentDate.jm && next.jd === currentDate.jd) {
+        return null; // unchanged — just close
+      }
+
+      const existing = findSessionByDate(next.jy, next.jm, next.jd);
+      if (existing) {
+        const filled = Object.keys(existing.slots?.['1'] || {}).length
+          + Object.keys(existing.slots?.['2'] || {}).length;
+        if (filled) {
+          errorEl.textContent = 'برای این تاریخ قبلاً حضور ثبت شده است. ابتدا آن جلسه را بررسی کنید.';
+          errorEl.hidden = false;
+          return { date: 'conflict' };
+        }
+      }
+
+      rerender(null, next, options);
+      toast('تاریخ جلسه تغییر کرد.', 'success');
+      return null;
+    },
+  });
 }
 
 /* ---------- Session picker ---------- */

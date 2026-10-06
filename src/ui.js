@@ -11,6 +11,7 @@ import {
   jalaliMonthLength,
   formatJalali,
   isValidJalali,
+  toPersianDigits,
 } from './jalali.js';
 
 /* ---------- Safe DOM builder ---------- */
@@ -263,6 +264,11 @@ export function createJalaliDatePicker(options = {}) {
   let view = selected ? { jy: selected.jy, jm: selected.jm } : { jy: today.jy, jm: today.jm };
   let open = false;
 
+  // A practical range for a class roster: a few years back to a few ahead.
+  // Wider than this and the year list becomes unusable on a phone.
+  const MIN_YEAR = today.jy - 15;
+  const MAX_YEAR = today.jy + 10;
+
   const valueSpan = el('span', { class: 'date-trigger__value' });
   const trigger = el('button', {
     type: 'button',
@@ -314,8 +320,65 @@ export function createJalaliDatePicker(options = {}) {
     if (!root.contains(e.target)) close();
   }
 
+  /**
+   * Keyboard support for the day grid: arrows move by a day or a week, PageUp /
+   * PageDown by a month, Home / End to the ends of the month, Enter or Space to
+   * pick. This is what makes the picker usable without a mouse or on a desktop.
+   */
   function onKey(e) {
-    if (e.key === 'Escape') close();
+    if (e.key === 'Escape') { close(); trigger.focus(); return; }
+    if (!open) return;
+
+    const focused = popup.querySelector('.datepicker__day:focus');
+    if (!focused) return;
+
+    const day = Number(focused.dataset.day);
+    const len = jalaliMonthLength(view.jy, view.jm);
+    let next = null;
+    let movedMonth = 0;
+
+    switch (e.key) {
+      case 'ArrowRight': next = day - 1; break;
+      case 'ArrowLeft': next = day + 1; break;
+      case 'ArrowUp': next = day - 7; break;
+      case 'ArrowDown': next = day + 7; break;
+      case 'PageUp': movedMonth = -1; next = day; break;
+      case 'PageDown': movedMonth = 1; next = day; break;
+      case 'Home': next = 1; break;
+      case 'End': next = len; break;
+      case 'Enter': case ' ':
+        e.preventDefault();
+        focused.click();
+        return;
+      default:
+        return;
+    }
+
+    e.preventDefault();
+    if (movedMonth) shiftMonth(movedMonth);
+
+    // Carry the day over when it moves past the edge of the month.
+    if (next < 1) { shiftMonth(-1); next = jalaliMonthLength(view.jy, view.jm); }
+    else if (next > len) { shiftMonth(1); next = 1; }
+
+    renderPopup();
+    const target = popup.querySelector(`.datepicker__day[data-day="${next}"]`);
+    if (target) target.focus();
+  }
+
+  /**
+   * Move the visible month by `delta` months, carrying the year over.
+   * Shared by the arrows and the keyboard shortcuts so they cannot drift apart.
+   */
+  function shiftMonth(delta) {
+    const total = view.jy * 12 + (view.jm - 1) + delta;
+    view.jy = Math.floor(total / 12);
+    view.jm = (total % 12) + 1;
+  }
+
+  /** Jump the view (and the selection) to a specific year, keeping the month. */
+  function goToYear(year) {
+    view.jy = Math.min(MAX_YEAR, Math.max(MIN_YEAR, year));
   }
 
   function renderPopup() {
@@ -323,30 +386,58 @@ export function createJalaliDatePicker(options = {}) {
 
     const prevBtn = el('button', {
       type: 'button', class: 'datepicker__nav', 'aria-label': 'ماه قبل',
-      onclick: () => {
-        view.jm -= 1;
-        if (view.jm < 1) { view.jm = 12; view.jy -= 1; }
-        renderPopup();
-      },
+      onclick: () => { shiftMonth(-1); renderPopup(); },
     }, icon('chevronRight'));
 
     const nextBtn = el('button', {
       type: 'button', class: 'datepicker__nav', 'aria-label': 'ماه بعد',
-      onclick: () => {
-        view.jm += 1;
-        if (view.jm > 12) { view.jm = 1; view.jy += 1; }
-        renderPopup();
-      },
+      onclick: () => { shiftMonth(1); renderPopup(); },
     }, icon('chevronLeft'));
+
+    // Month picker — jumping straight to a month beats tapping an arrow
+    // repeatedly when the target is most of a year away.
+    const monthSelect = el('select', {
+      class: 'datepicker__select', 'aria-label': 'انتخاب ماه',
+      onchange: (e) => { view.jm = Number(e.target.value); renderPopup(); },
+    });
+    MONTH_NAMES.forEach((name, idx) => {
+      const opt = el('option', { value: String(idx + 1) }, name);
+      if (idx + 1 === view.jm) opt.selected = true;
+      monthSelect.append(opt);
+    });
+
+    // Year picker with a decade jump on either side.
+    const yearSelect = el('select', {
+      class: 'datepicker__select datepicker__select--year', 'aria-label': 'انتخاب سال',
+      onchange: (e) => { goToYear(Number(e.target.value)); renderPopup(); },
+    });
+    for (let y = MAX_YEAR; y >= MIN_YEAR; y -= 1) {
+      const opt = el('option', { value: String(y) }, toPersianDigits(y));
+      if (y === view.jy) opt.selected = true;
+      yearSelect.append(opt);
+    }
+
+    const decadeBack = el('button', {
+      type: 'button', class: 'datepicker__jump', 'aria-label': 'ده سال قبل',
+      title: 'ده سال قبل',
+      onclick: () => { goToYear(view.jy - 10); renderPopup(); },
+    }, '−۱۰');
+
+    const decadeFwd = el('button', {
+      type: 'button', class: 'datepicker__jump', 'aria-label': 'ده سال بعد',
+      title: 'ده سال بعد',
+      onclick: () => { goToYear(view.jy + 10); renderPopup(); },
+    }, '+۱۰');
 
     popup.append(el('div', { class: 'datepicker__head' }, [
       prevBtn,
-      el('span', { class: 'datepicker__label' }, `${MONTH_NAMES[view.jm - 1]} ${view.jy}`),
+      el('div', { class: 'datepicker__selects' }, [monthSelect, yearSelect]),
       nextBtn,
     ]));
+    popup.append(el('div', { class: 'datepicker__jumps' }, [decadeBack, decadeFwd]));
 
     // Weekday header (Saturday first)
-    const grid = el('div', { class: 'datepicker__grid' });
+    const grid = el('div', { class: 'datepicker__grid', role: 'grid' });
     WEEKDAY_SHORT.forEach((w) => grid.append(el('div', { class: 'datepicker__dow' }, w)));
 
     // First day of month -> weekday offset (Saturday-based)
@@ -366,13 +457,19 @@ export function createJalaliDatePicker(options = {}) {
       const btn = el('button', {
         type: 'button',
         class: classes.join(' '),
-        'aria-label': `${d} ${MONTH_NAMES[view.jm - 1]} ${view.jy}`,
-        'aria-pressed': isSelected ? 'true' : 'false',
+        role: 'gridcell',
+        // tabindex 0 on the selected (or first) day makes the grid keyboard
+        // reachable; arrow keys then move the focus inside it.
+        tabindex: isSelected || (!selected && d === 1) ? '0' : '-1',
+        'data-day': String(d),
+        'aria-label': `${d} ${MONTH_NAMES[view.jm - 1]} ${toPersianDigits(view.jy)}`,
+        'aria-selected': isSelected ? 'true' : 'false',
         onclick: () => { commit({ jy: view.jy, jm: view.jm, jd: d }); close(); },
-      }, String(d));
+      }, toPersianDigits(d));
       grid.append(btn);
     }
     popup.append(grid);
+    popup.append(el('p', { class: 'datepicker__hint' }, 'با کلیدهای جهت‌دار جابه‌جا شوید؛ Enter انتخاب می‌کند.'));
 
     const footer = el('div', { class: 'datepicker__footer' });
     footer.append(el('button', {
