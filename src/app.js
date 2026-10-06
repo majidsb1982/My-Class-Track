@@ -121,6 +121,8 @@ function renderRoute(routeId, { keepOptions = false } = {}) {
   if (!main) return;
   const route = ROUTES.find((r) => r.id === routeId) || ROUTES[0];
 
+  // Let the outgoing page release timers/listeners before its DOM disappears.
+  main.dispatchEvent(new CustomEvent('mct:destroy', { bubbles: true }));
   clear(main);
   main.append(el('div', { class: 'page-enter' }, []));
   const page = main.firstElementChild;
@@ -194,9 +196,41 @@ function initOfflineIndicator() {
 function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch(() => {
+    navigator.serviceWorker.register('sw.js').then((reg) => {
+      // A newly deployed worker takes control as soon as it activates (sw.js
+      // calls skipWaiting), so offer a one-tap reload instead of waiting for
+      // every tab to be closed.
+      reg.addEventListener('updatefound', () => {
+        const incoming = reg.installing;
+        if (!incoming) return;
+        incoming.addEventListener('statechange', () => {
+          if (incoming.state === 'installed' && navigator.serviceWorker.controller) {
+            promptForUpdate();
+          }
+        });
+      });
+      // Check for a new version on every launch, so a long-lived install
+      // does not stay on an old build.
+      reg.update().catch(() => {});
+    }).catch(() => {
       /* Offline support is best-effort; never break the app because of it. */
     });
+  });
+}
+
+/** Offer to reload when a newer build has been installed in the background. */
+let updatePrompted = false;
+function promptForUpdate() {
+  if (updatePrompted) return;
+  updatePrompted = true;
+  confirmDialog({
+    title: 'نسخه جدید آماده است',
+    text: 'نسخه تازه‌ای از برنامه دانلود شد. برای استفاده از آن، برنامه بازنشانی شود؟',
+    confirmText: 'به‌روزرسانی کن',
+    cancelText: 'بعداً',
+  }).then((ok) => {
+    if (ok) window.location.reload();
+    else updatePrompted = false;
   });
 }
 

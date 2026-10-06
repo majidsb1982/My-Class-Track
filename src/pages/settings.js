@@ -11,7 +11,7 @@ import { WEEKDAY_NAMES, toPersianDigits, formatTime, formatJalali, todayJalali }
 import { getTheme, getFontSize, setPrefs, applyTheme, applyFontSize } from '../prefs.js';
 import { paymentsCsv, downloadCsv, openReport, fileStamp } from '../reports.js';
 
-const APP_VERSION = 'v1.1.0';
+const APP_VERSION = 'v1.3.0';
 
 /** Render the settings page into the given container. */
 export function renderSettings(container) {
@@ -372,6 +372,7 @@ function rerender() {
   if (!main) return;
   const page = main.firstElementChild;
   if (!page) return;
+  page.dispatchEvent(new CustomEvent('mct:destroy', { bubbles: true }));
   page.replaceChildren();
   renderSettings(page);
 }

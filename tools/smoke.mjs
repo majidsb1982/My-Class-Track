@@ -241,6 +241,73 @@ await ctx.setOffline(false);
 
 check("no console errors", errors.length === 0, errors.slice(0, 3).join(" | "));
 
+// 6. Door mode: the bulk «همه حاضرند» action must record everyone still pending.
+await ctx.setOffline(false);
+await page.evaluate(() => {
+  localStorage.setItem("mct:data", JSON.stringify({
+    version: 1, sessions: [], payments: [], homeworks: [], classSchedule: [],
+    periods: [], meta: {},
+    members: [
+      { id: "m1", name: "الف", phone: "09120000001", roles: [], birth: null, note: "", active: true },
+      { id: "m2", name: "ب", phone: "09120000002", roles: [], birth: null, note: "", active: true },
+      { id: "m3", name: "ج", phone: "09120000003", roles: [], birth: null, note: "", active: true },
+    ],
+  }));
+});
+await page.goto(BASE, { waitUntil: "domcontentloaded" });
+await page.waitForSelector(".nav-link", { timeout: 15000 });
+await page.click('.nav-link[data-route="attendance"]');
+await page.waitForSelector(".attend-card", { timeout: 5000 });
+await page.evaluate(() =>
+  [...document.querySelectorAll("button")]
+    .find((b) => b.textContent.includes("حالت پشت در"))
+    .click(),
+);
+await page.waitForSelector(".door-screen", { timeout: 5000 });
+const doorCards = await page.locator(".door-card").count();
+check("door mode lists all members", doorCards === 3, String(doorCards));
+
+await page.evaluate(() =>
+  [...document.querySelectorAll(".door__footer button")]
+    .find((b) => b.textContent.includes("همه حاضرند"))
+    .click(),
+);
+await page.waitForSelector(".dialog", { timeout: 5000 });
+await page.evaluate(() =>
+  [...document.querySelectorAll(".dialog__actions button")]
+    .find((b) => b.textContent.includes("حاضرند"))
+    .click(),
+);
+await wait(500);
+const allPresent = await page.evaluate(() => {
+  const d = JSON.parse(localStorage.getItem("mct:data") || "null");
+  const slot2 = d?.sessions?.[0]?.slots?.["2"] || {};
+  const ids = Object.keys(slot2);
+  return { count: ids.length, allPresent: ids.every((k) => slot2[k].status === "present") };
+});
+check("bulk action records everyone present", allPresent.count === 3 && allPresent.allPresent,
+  JSON.stringify(allPresent));
+
+// Tapping one card must not rebuild the whole list.
+const beforeTap = await page.evaluate(() => {
+  document.querySelectorAll(".door-card")[0].dataset.probe = "kept";
+  return document.querySelectorAll(".door-card").length;
+});
+await page.evaluate(() => {
+  const btn = [...document.querySelectorAll(".door-card")[1].querySelectorAll(".door-btn")]
+    .find((b) => b.textContent.includes("غایب"));
+  btn.click();
+});
+await wait(300);
+const afterTap = await page.evaluate(() => ({
+  probe: document.querySelectorAll(".door-card")[0]?.dataset.probe,
+  count: document.querySelectorAll(".door-card").length,
+}));
+check("door tap re-renders one card, not the list",
+  afterTap.probe === "kept" && afterTap.count === beforeTap, JSON.stringify(afterTap));
+
+check("no console errors after upgrades", errors.length === 0, errors.slice(0, 3).join(" | "));
+
 const failed = results.filter((r) => !r.pass);
 console.log(
   `\n${failed.length === 0 ? "ALL SMOKE CHECKS PASSED" : `${failed.length} SMOKE CHECK(S) FAILED`}\n`,

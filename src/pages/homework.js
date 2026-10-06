@@ -5,7 +5,7 @@
 
 import {
   el, icon, toast, pageHead, emptyState, formModal, textAreaField,
-  createJalaliDatePicker, confirmDialog,
+  createJalaliDatePicker, confirmDialog, debounce,
 } from '../ui.js';
 import { copyText } from '../reports.js';
 import { getHomeworks, saveHomework, deleteHomework, getNextClass } from '../store.js';
@@ -37,9 +37,10 @@ export function renderHomework(container, options = {}) {
   });
   const listWrap = el('div', {});
 
+  const rerenderList = debounce(() => renderList(listWrap, options), 160);
   searchInput.addEventListener('input', () => {
     searchTerm = searchInput.value.trim();
-    renderList(listWrap, options);
+    rerenderList();
   });
 
   container.append(el('div', { class: 'field' }, [searchInput]));
@@ -178,6 +179,7 @@ function rerender(options = {}) {
   if (!main) return;
   const page = main.firstElementChild;
   if (!page) return;
+  page.dispatchEvent(new CustomEvent('mct:destroy', { bubbles: true }));
   page.replaceChildren();
   renderHomework(page, options);
 }

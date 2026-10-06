@@ -18,7 +18,7 @@ import sys
 import zipfile
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
-VERSION = "1.0.0"
+VERSION = "1.3.0"
 
 # همه چیزی که برای اجرا لازم است (نه سورس تست و نه ابزار ساخت).
 INCLUDE_FILES = [

@@ -58,6 +58,7 @@ export function renderHome(container, options = {}) {
 
 function renderNextClass(next) {
   const timeEl = el('div', { class: 'home-countdown__value' }, '—');
+  const progressEl = el('div', { class: 'home-countdown__progress' });
   const card = el('section', { class: 'card home-countdown' }, [
     el('div', { class: 'home-countdown__label' }, 'کلاس بعدی'),
     el('div', { class: 'home-countdown__date' },
@@ -65,30 +66,66 @@ function renderNextClass(next) {
     el('div', { class: 'home-countdown__time' },
       `ساعت ${toPersianDigits(next.start)} تا ${toPersianDigits(next.end)}`),
     timeEl,
+    progressEl,
   ]);
 
   const target = toGregorian(next.jy, next.jm, next.jd);
   target.setHours(...next.start.split(':').map(Number), 0, 0);
+  const totalMs = Math.max(1, target.getTime() - Date.now());
+
+  let timerId = null;
+  // 1s ticks only when the class is under an hour away; otherwise 30s is plenty.
+  let fastTick = false;
+
+  /** Stop ticking. Called at zero and when the card is torn down. */
+  function stop() {
+    if (timerId) { clearInterval(timerId); timerId = null; }
+  }
+
+  /** Start (or restart) the interval with the cadence that fits the remaining time. */
+  function schedule() {
+    stop();
+    const remaining = target.getTime() - Date.now();
+    if (remaining <= 0) return;
+    fastTick = remaining < 3600000;
+    timerId = setInterval(() => {
+      const left = target.getTime() - Date.now();
+      if (left <= 0) { tick(); stop(); return; }
+      tick();
+      // Crossing the one-hour mark changes the cadence; restart once.
+      const wantFast = left < 3600000;
+      if (wantFast !== fastTick) schedule();
+    }, fastTick ? 1000 : 30000);
+  }
 
   const tick = () => {
     const remaining = target.getTime() - Date.now();
     if (remaining <= 0) {
       timeEl.textContent = 'کلاس شروع شده';
       timeEl.classList.add('is-done');
-      return false;
+      progressEl.replaceChildren();
+      return;
     }
-    timeEl.textContent = countdownText(remaining);
-    return true;
+
+    // Under an hour, show whole minutes so the value visibly moves each second.
+    const totalMinutes = Math.floor(remaining / 60000);
+    timeEl.textContent = totalMinutes < 60
+      ? `${toPersianDigits(totalMinutes)} دقیقه مانده`
+      : countdownText(remaining);
+
+    const pct = Math.min(100, Math.max(0, (1 - remaining / totalMs) * 100));
+    progressEl.replaceChildren(el('div', {
+      class: 'home-countdown__bar',
+      style: { width: `${pct.toFixed(1)}%` },
+    }));
   };
 
-  if (tick()) {
-    const id = setInterval(() => {
-      if (!tick()) clearInterval(id);
-    }, 30000);
-    // Stop counting when the page is hidden for a long time is unnecessary:
-    // the value is derived from Date.now() on every tick, so it cannot drift.
-  }
+  tick();
+  schedule();
 
+  // The card can be removed at any time (route change, data re-render); a leaked
+  // interval would keep running forever, so tear it down with the node.
+  card.addEventListener('mct:destroy', stop);
   return card;
 }
 

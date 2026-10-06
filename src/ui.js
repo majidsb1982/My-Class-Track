@@ -60,6 +60,20 @@ export function clear(node) {
   while (node.firstChild) node.removeChild(node.firstChild);
 }
 
+/**
+ * Wrap `fn` so it only runs once `wait` ms have passed without another call.
+ * Used for search boxes, where re-rendering on every keystroke is wasted work.
+ */
+export function debounce(fn, wait = 180) {
+  let id = null;
+  const wrapped = (...args) => {
+    if (id) clearTimeout(id);
+    id = setTimeout(() => { id = null; fn(...args); }, wait);
+  };
+  wrapped.cancel = () => { if (id) { clearTimeout(id); id = null; } };
+  return wrapped;
+}
+
 /* ---------- Icons (inline SVG, no library) ---------- */
 
 const ICONS = {
@@ -602,6 +616,7 @@ export function formModal(options = {}) {
 export default {
   el,
   clear,
+  debounce,
   icon,
   hydrateStaticIcons,
   toast,

@@ -4,7 +4,7 @@
    Designed to be used standing up, in a hurry, one-handed.
    ============================================================ */
 
-import { el, icon } from '../ui.js';
+import { el, icon, toast, confirmDialog } from '../ui.js';
 import {
   ATTENDANCE_STATUS, STATUS_KEYS,
   getMembers, getSession, setAttendance, attendanceProgress,
@@ -48,6 +48,10 @@ export function renderDoorMode(options = {}) {
   // --- Footer ---
   screen.append(el('div', { class: 'door__footer' }, [
     el('button', {
+      type: 'button', class: 'btn btn--secondary btn--block',
+      onclick: () => markAllPresent(),
+    }, [icon('check'), 'همه حاضرند']),
+    el('button', {
       type: 'button', class: 'btn btn--primary btn--lg btn--block',
       onclick: () => {
         showRound2Report();
@@ -56,6 +60,35 @@ export function renderDoorMode(options = {}) {
   ]));
 
   renderList();
+
+  /* ---------- Bulk action ---------- */
+
+  /**
+   * Record every member who has no round-2 decision yet as present, after a
+   * confirmation. At the door most people show up, so this saves a tap per
+   * person; anyone still missing can then be switched to late/absent.
+   */
+  async function markAllPresent() {
+    const members = getMembers();
+    const session = getSession(sessionId);
+    const slot2 = session?.slots?.['2'] || {};
+    const pending = members.filter((m) => !slot2[m.id]);
+    if (!pending.length) {
+      toast('همه اعضا ثبت شده‌اند.', 'info', 1600);
+      return;
+    }
+    const ok = await confirmDialog({
+      title: 'ثبت گروهی',
+      text: `${toPersianDigits(pending.length)} نفر که هنوز ثبت نشده‌اند «حاضر» ثبت شوند؟`,
+      confirmText: 'بله، حاضرند',
+      cancelText: 'انصراف',
+    });
+    if (!ok) return;
+    pending.forEach((m) => setAttendance(sessionId, 2, m.id, { status: 'present' }));
+    toast(`${toPersianDigits(pending.length)} نفر حاضر ثبت شدند.`, 'success');
+    if (navigator.vibrate) { try { navigator.vibrate(35); } catch { /* ignore */ } }
+    renderList();
+  }
 
   /* ---------- Round 2 report ---------- */
 
@@ -109,6 +142,7 @@ export function renderDoorMode(options = {}) {
 
   function renderDoorCard(member, record, previous) {
     const card = el('div', { class: `door-card${record ? ' is-done' : ''}` });
+    card.dataset.member = member.id;
 
     // Name + previous round badge + call button
     const head = el('div', { class: 'door-card__head' }, [
@@ -150,7 +184,10 @@ export function renderDoorMode(options = {}) {
             setAttendance(sessionId, 2, member.id, entry);
           }
           if (navigator.vibrate) { try { navigator.vibrate(35); } catch { /* ignore */ } }
-          renderList();
+          // Rebuild only this card instead of the whole list: at the door the
+          // list can be long and a full re-render on every tap is wasted work.
+          refreshCard(card, member);
+          updateCount();
         },
       }, [
         el('span', { class: 'door-btn__icon', 'aria-hidden': 'true' }, st.icon),
@@ -160,15 +197,34 @@ export function renderDoorMode(options = {}) {
     });
     card.append(row);
 
-    if (record?.status) {
-      card.append(el('div', { class: 'door-card__recorded' }, [
-        'ثبت شد: ',
-        `${ATTENDANCE_STATUS[record.status].icon} ${ATTENDANCE_STATUS[record.status].label}`,
-        record.lateTime ? ` (حدود ${toPersianDigits(record.lateTime)})` : '',
-      ]));
-    }
+    if (record?.status) card.append(recordedLine(record));
 
     return card;
+  }
+
+  /** The «ثبت شد: …» strip shown under a card that has a decision. */
+  function recordedLine(record) {
+    return el('div', { class: 'door-card__recorded' }, [
+      'ثبت شد: ',
+      `${ATTENDANCE_STATUS[record.status].icon} ${ATTENDANCE_STATUS[record.status].label}`,
+      record.lateTime ? ` (حدود ${toPersianDigits(record.lateTime)})` : '',
+    ]);
+  }
+
+  /** Re-render a single card in place after its status changed. */
+  function refreshCard(card, member) {
+    const session = getSession(sessionId);
+    const record = session?.slots?.['2']?.[member.id];
+    const previous = session?.slots?.['1']?.[member.id];
+    const fresh = renderDoorCard(member, record, previous);
+    card.replaceWith(fresh);
+  }
+
+  /** Update the «n/m» counter in the top bar. */
+  function updateCount() {
+    const session = getSession(sessionId);
+    doneCount.textContent =
+      `${toPersianDigits(attendanceProgress(session, 2))}/${toPersianDigits(getMembers().length)}`;
   }
 }
 

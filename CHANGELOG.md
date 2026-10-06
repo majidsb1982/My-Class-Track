@@ -5,7 +5,44 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] — 2026-10-06
+
+### Added
+
+- **Attendance trends.** The attendance page now charts attendance across the eight most recent sessions, with running totals for present / late / absent / problem.
+- **Per-member history.** Every active member has a history button opening their attendance record: a rate percentage, status counts and a session-by-session list with both rounds, late times and notes.
+- **New store analytics**: `getMemberHistory()`, `getMemberStats()` and `getAttendanceTrend()`. A member's rate counts «حاضر» and «تأخیر» as attended, since both mean the person turned up.
+
+### Repository hygiene
+
+- **Removed the duplicate deployment workflow.** `.github/workflows/main.yml` was byte-identical to `pages.yml`, so every push to `main` triggered two competing Pages deployments. Deleted in favour of the single `pages.yml`.
+- **Added a CI workflow** (`.github/workflows/ci.yml`) running `check-project.mjs` and `check-html.mjs` on every push and pull request — previously nothing validated a PR before deploy.
+- **Added the missing LICENSE** (MIT), plus `CONTRIBUTING.md`, `SECURITY.md`, YAML issue forms for bugs and feature requests, an issue-template config pointing security reports to private advisories, and a pull-request template with the project's check-list.
+- **Untracked the stray `.single-check.mjs` dev helper** and expanded `.gitignore` (`.idea/`, `*.pyc`, `*.zip`, editor swap files).
+- **README** gained CI / deploy / license / dependency badges, a quality-gates section, and an accurate file tree (it was missing `prefs.js`, `run.py`, `build-portable.py` and the `tools/` scripts).
+
+### Changed
+
+- Regression coverage in `tools/check-project.mjs` now also exercises the analytics: two sessions built through the public API, then history ordering, attendance-rate maths (absent lowers the rate, late does not) and trend totals including the unrecorded count.
+
 ## [Unreleased]
+
+### Added
+
+- **In-app update prompt.** `sw.js` already called `skipWaiting()`, so a new deploy activated silently and users could keep running an old build until every tab was closed. The service worker now watches for `updatefound`, calls `reg.update()` on each launch, and offers a one-tap reload when a newer build is ready.
+- **«همه حاضرند» bulk action in door mode.** At the door most members turn up, so one confirmed tap now records every still-pending member as present; individual cards can then be switched to late/absent.
+- **Duplicate phone warning.** `store.findPhoneOwner()` reports when a number is already assigned to another member, and the member form warns on blur without blocking the save.
+- **Countdown progress bar** on the home card, showing how much of the wait to the next class has elapsed.
+- **Shared `debounce()` helper** in `ui.js`, used by the member and homework search boxes.
+
+### Performance
+
+- **Fixed an interval leak on the home countdown.** The countdown interval was never cleared when the card was removed, so every visit to the home page left a timer running forever. Pages now receive an `mct:destroy` event before their DOM is cleared, and the countdown (plus the door screen) releases its timers and listeners on it.
+- **Countdown ticks every second near class start.** It was a fixed 30 s interval, so the final minutes looked frozen. It now runs at 1 s inside the last hour and 30 s further out, switching automatically at the one-hour mark.
+- **Door taps update one card instead of the whole list.** Recording a status rebuilt every card; it now re-renders only the tapped card and the top-bar counter.
+- **Memoised Jalali leap-year flags.** `jalaliMonthLength` called `jalCalLeap` (a break-table walk) on every query, including once per day cell when rendering a month grid and once per member when scanning birthdays.
+
+## [1.1.0] — 2026-10-06
 
 A full audit pass over data integrity, preference handling, offline behaviour and reporting.
 

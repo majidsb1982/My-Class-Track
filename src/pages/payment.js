@@ -222,6 +222,7 @@ function rerender(options = {}) {
   if (!main) return;
   const page = main.firstElementChild;
   if (!page) return;
+  page.dispatchEvent(new CustomEvent('mct:destroy', { bubbles: true }));
   page.replaceChildren();
   renderPayment(page, options);
 }

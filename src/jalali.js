@@ -20,9 +20,25 @@ export const WEEKDAY_SHORT = ['ش', 'ی', 'د', 'س', 'چ', 'پ', 'ج'];
 function div(a, b) { return ~~(a / b); }
 function mod(a, b) { return a - ~~(a / b) * b; }
 
+/**
+ * Memoised leap-year flags. `jalCalLeap` walks a break table on every call and
+ * month-length queries happen in tight loops (rendering a month grid, scanning
+ * every member's birthday), so caching the per-year answer removes that work.
+ */
+const leapCache = new Map();
+
+function leapFlag(jy) {
+  if (leapCache.has(jy)) return leapCache.get(jy);
+  const value = jalCalLeap(jy) === 0;
+  // Bounded growth: the app only ever asks about a handful of years.
+  if (leapCache.size > 512) leapCache.clear();
+  leapCache.set(jy, value);
+  return value;
+}
+
 /** Is the given Jalali year a leap year (has 366 days)? */
 export function isLeapJalaliYear(jy) {
-  return jalCalLeap(jy) === 0;
+  return leapFlag(jy);
 }
 
 /**
@@ -31,7 +47,7 @@ export function isLeapJalaliYear(jy) {
 export function jalaliMonthLength(jy, jm) {
   if (jm <= 6) return 31;
   if (jm <= 11) return 30;
-  return isLeapJalaliYear(jy) ? 30 : 29;
+  return leapFlag(jy) ? 30 : 29;
 }
 
 /* ---------- jalaali-js core algorithm ---------- */
