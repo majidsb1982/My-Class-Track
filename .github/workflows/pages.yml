@@ -33,6 +33,11 @@ jobs:
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
+        with:
+          # Turn Pages on (and switch its source to GitHub Actions) if it has
+          # never been enabled for this repository. Without this the step fails
+          # with "Get Pages site failed ... Not Found" on a fresh repo.
+          enablement: true
 
       # Static site with no build — just upload the repository contents.
       - name: Upload artifact
