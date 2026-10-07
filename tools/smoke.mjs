@@ -428,6 +428,58 @@ check("event edit updates in place",
 
 check("no console errors after events", errors.length === 0, errors.slice(0, 3).join(" | "));
 
+// 10. The birthday picker must reach decades back, not just the last 15 years.
+await page.evaluate(() => localStorage.removeItem("mct:data"));
+await page.goto(BASE, { waitUntil: "domcontentloaded" });
+await page.waitForSelector(".nav-link", { timeout: 15000 });
+await page.click('.nav-link[data-route="members"]');
+await page.waitForSelector(".btn", { timeout: 5000 });
+await page.evaluate(() =>
+  [...document.querySelectorAll("button")]
+    .find((b) => b.textContent.includes("افزودن عضو"))
+    .click(),
+);
+await page.waitForSelector(".dialog--form", { timeout: 5000 });
+await page.click('.dialog--form .date-trigger');
+await page.waitForSelector('.datepicker__grid', { timeout: 5000 });
+
+// Type a birth year 70 years back and confirm the view jumps there.
+const yearInput = page.locator('.datepicker__year-input');
+const hasYearInput = await yearInput.count();
+check('birthday picker has a year entry field', hasYearInput === 1, String(hasYearInput));
+
+await yearInput.fill('۱۳۳۵');
+await yearInput.press('Enter');
+await wait(300);
+const jumpedYear = await page.locator('.datepicker__select--year').inputValue();
+check('year entry jumps to an old birth year', jumpedYear === '1335', jumpedYear);
+
+// An out-of-range year must be refused rather than silently accepted.
+await yearInput.fill('۱۲۰۰');
+await yearInput.press('Enter');
+await wait(200);
+const afterBadYear = await page.locator('.datepicker__select--year').inputValue();
+check('out-of-range year is refused', afterBadYear === '1335', afterBadYear);
+
+// Pick a day and save, then confirm the stored birth is the old year.
+await page.locator('.datepicker__day:not(.datepicker__day--muted)').first().click();
+await wait(200);
+await page.fill('.dialog--form input[type="text"]', 'عضو مسن');
+await page.evaluate(() =>
+  [...document.querySelectorAll(".dialog__actions button")]
+    .find((b) => b.type === "submit")
+    .click(),
+);
+await wait(500);
+const storedBirth = await page.evaluate(() => {
+  const d = JSON.parse(localStorage.getItem("mct:data") || "null");
+  const m = d?.members?.find((x) => x.name === "عضو مسن");
+  return m?.birth || null;
+});
+check('old birth year is saved', storedBirth?.jy === 1335, JSON.stringify(storedBirth));
+
+check("no console errors after calendar fix", errors.length === 0, errors.slice(0, 3).join(" | "));
+
 const failed = results.filter((r) => !r.pass);
 console.log(
   `\n${failed.length === 0 ? "ALL SMOKE CHECKS PASSED" : `${failed.length} SMOKE CHECK(S) FAILED`}\n`,

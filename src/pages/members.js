@@ -287,6 +287,8 @@ function openMemberForm(member) {
   const birthPicker = createJalaliDatePicker({
     value: member?.birth || null,
     placeholder: 'انتخاب تاریخ تولد (شمسی)',
+    // A member can be any age, so the year list must reach back decades.
+    range: 'birth',
   });
   const birthError = el('span', { class: 'field__error', role: 'alert' });
   birthError.hidden = true;

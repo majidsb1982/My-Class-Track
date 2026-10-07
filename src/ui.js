@@ -12,6 +12,7 @@ import {
   formatJalali,
   isValidJalali,
   toPersianDigits,
+  toLatinDigits,
 } from './jalali.js';
 
 /* ---------- Safe DOM builder ---------- */
@@ -264,10 +265,16 @@ export function createJalaliDatePicker(options = {}) {
   let view = selected ? { jy: selected.jy, jm: selected.jm } : { jy: today.jy, jm: today.jm };
   let open = false;
 
-  // A practical range for a class roster: a few years back to a few ahead.
-  // Wider than this and the year list becomes unusable on a phone.
-  const MIN_YEAR = today.jy - 15;
+  // The year range depends on what the field is for. A birthday needs to reach
+  // back decades (a 70-year-old is born around 1334), while a payment date only
+  // ever looks a little way back. `range: 'birth'` widens the list; the default
+  // stays short so the year dropdown is not a 100-item scroll for every field.
+  const isBirth = options.range === 'birth';
+  const MIN_YEAR = isBirth ? 1300 : today.jy - 15;
   const MAX_YEAR = today.jy + 10;
+  // The year list is only ever rendered as a window around the current view,
+  // so a 100-year span costs nothing (see the year select below).
+  const YEARS_PER_PAGE = 25;
 
   const valueSpan = el('span', { class: 'date-trigger__value' });
   const trigger = el('button', {
@@ -308,6 +315,8 @@ export function createJalaliDatePicker(options = {}) {
     trigger.setAttribute('aria-expanded', 'false');
     document.removeEventListener('click', onDocClick, true);
     document.removeEventListener('keydown', onKey);
+    window.removeEventListener('resize', positionPopup);
+    window.removeEventListener('scroll', positionPopup, true);
   }
 
   /** Tear the picker down completely (used when a hosting dialog closes). */
@@ -317,7 +326,35 @@ export function createJalaliDatePicker(options = {}) {
   }
 
   function onDocClick(e) {
-    if (!root.contains(e.target)) close();
+    if (!root.contains(e.target) && !popup.contains(e.target)) close();
+  }
+
+  /**
+   * Anchor the fixed-position popup under (or above) the trigger, clamped to the
+   * viewport. Called on open, on scroll and on resize so it never drifts.
+   */
+  function positionPopup() {
+    if (!open) return;
+    const rect = trigger.getBoundingClientRect();
+    const gap = 8;
+    const width = Math.min(340, window.innerWidth - 24);
+
+    popup.style.width = `${width}px`;
+    const height = popup.offsetHeight || 380;
+
+    // Prefer below the trigger; flip above when there is not enough room.
+    const spaceBelow = window.innerHeight - rect.bottom - gap;
+    const openAbove = spaceBelow < height && rect.top > spaceBelow;
+
+    let left = rect.left + rect.width / 2 - width / 2;
+    left = Math.max(12, Math.min(left, window.innerWidth - width - 12));
+
+    const top = openAbove
+      ? Math.max(12, rect.top - height - gap)
+      : Math.min(rect.bottom + gap, window.innerHeight - height - 12);
+
+    popup.style.left = `${left}px`;
+    popup.style.top = `${Math.max(12, top)}px`;
   }
 
   /**
@@ -383,6 +420,7 @@ export function createJalaliDatePicker(options = {}) {
 
   function renderPopup() {
     clear(popup);
+    positionPopup();
 
     const prevBtn = el('button', {
       type: 'button', class: 'datepicker__nav', 'aria-label': 'ماه قبل',
@@ -406,12 +444,17 @@ export function createJalaliDatePicker(options = {}) {
       monthSelect.append(opt);
     });
 
-    // Year picker with a decade jump on either side.
+    // Year picker. For a birthday the allowed span is ~100 years, so the list
+    // shows a 25-year window around the current view; the ±10-year buttons move
+    // that window. Without this the dropdown would be a 100-item scroll.
     const yearSelect = el('select', {
       class: 'datepicker__select datepicker__select--year', 'aria-label': 'انتخاب سال',
       onchange: (e) => { goToYear(Number(e.target.value)); renderPopup(); },
     });
-    for (let y = MAX_YEAR; y >= MIN_YEAR; y -= 1) {
+
+    const windowStart = Math.max(MIN_YEAR, view.jy - Math.floor(YEARS_PER_PAGE / 2));
+    const windowEnd = Math.min(MAX_YEAR, windowStart + YEARS_PER_PAGE - 1);
+    for (let y = windowEnd; y >= windowStart; y -= 1) {
       const opt = el('option', { value: String(y) }, toPersianDigits(y));
       if (y === view.jy) opt.selected = true;
       yearSelect.append(opt);
@@ -429,12 +472,32 @@ export function createJalaliDatePicker(options = {}) {
       onclick: () => { goToYear(view.jy + 10); renderPopup(); },
     }, '+۱۰');
 
+    // A decade button only moves 10 years; typing the year is far faster when
+    // the target is a birth year decades away.
+    const yearInput = el('input', {
+      class: 'datepicker__year-input', type: 'text', inputmode: 'numeric',
+      'aria-label': 'سال را بنویسید', placeholder: 'مثلاً ۱۳۵۰',
+      value: toPersianDigits(view.jy),
+    });
+    yearInput.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      const parsed = Number(toLatinDigits(e.target.value).replace(/[^0-9]/g, ''));
+      if (Number.isInteger(parsed) && parsed >= MIN_YEAR && parsed <= MAX_YEAR) {
+        goToYear(parsed);
+        renderPopup();
+      } else {
+        // Out of range: put the current year back so the field is never wrong.
+        e.target.value = toPersianDigits(view.jy);
+      }
+    });
+
     popup.append(el('div', { class: 'datepicker__head' }, [
       prevBtn,
       el('div', { class: 'datepicker__selects' }, [monthSelect, yearSelect]),
       nextBtn,
     ]));
-    popup.append(el('div', { class: 'datepicker__jumps' }, [decadeBack, decadeFwd]));
+    popup.append(el('div', { class: 'datepicker__jumps' }, [decadeBack, yearInput, decadeFwd]));
 
     // Weekday header (Saturday first)
     const grid = el('div', { class: 'datepicker__grid', role: 'grid' });
@@ -490,10 +553,14 @@ export function createJalaliDatePicker(options = {}) {
     open = true;
     trigger.setAttribute('aria-expanded', 'true');
     renderPopup();
-    // Keep popup inside the field root
-    root.append(popup);
+    // The popup is fixed to the viewport and lives on <body>, so it cannot be
+    // clipped by the form dialog's scroll container.
+    document.body.append(popup);
+    positionPopup();
     document.addEventListener('click', onDocClick, true);
     document.addEventListener('keydown', onKey);
+    window.addEventListener('resize', positionPopup);
+    window.addEventListener('scroll', positionPopup, true);
   });
 
   renderValue();
