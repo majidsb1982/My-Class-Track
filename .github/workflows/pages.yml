@@ -1,7 +1,7 @@
 # ============================================================
-   .github/workflows/pages.yml — Publish My-Class-Track to Pages
-   Plain static files: no build step, no dependencies.
-   ============================================================
+#   .github/workflows/pages.yml — Publish My-Class-Track to Pages
+#   Plain static files: no build step, no dependencies.
+# ============================================================
 
 name: Deploy to GitHub Pages
 

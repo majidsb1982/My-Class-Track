@@ -322,7 +322,29 @@ try {
   bad(`manifest not valid JSON: ${e.message}`);
 }
 
-console.log('\n7. Security spot-checks');
+console.log('\n7. Workflow YAML sanity');
+// A malformed header (indented text that is not commented) makes GitHub reject
+// the whole workflow with "Invalid workflow file". Catch it here instead.
+for (const wf of ['.github/workflows/pages.yml', '.github/workflows/ci.yml']) {
+  const p = join(ROOT, wf);
+  if (!existsSync(p)) { bad(`missing ${wf}`); continue; }
+  const wfText = readFileSync(p, 'utf8');
+  const wfLines = wfText.split(/\r?\n/);
+  const offenders = [];
+  let seenKey = false;
+  wfLines.forEach((l, i) => {
+    if (l.trim() === '' || /^#/.test(l)) return;
+    if (/^\S/.test(l)) { seenKey = true; return; }
+    // Indented content is only valid after a top-level key has been seen.
+    if (!seenKey) offenders.push(i + 1);
+  });
+  if (offenders.length) bad(`${wf}: indented text before any key at line(s) ${offenders.join(', ')}`);
+  else ok(`${wf} root indentation`);
+  if (!/^name:/m.test(wfText)) bad(`${wf}: no top-level name`);
+  else ok(`${wf} has a name`);
+}
+
+console.log('\n8. Security spot-checks');
 const html = readFileSync(join(ROOT, 'index.html'), 'utf8');
 if (html.includes('rel="manifest"')) ok('manifest linked'); else bad('manifest not linked');
 const swText = sw;
